@@ -1,0 +1,29 @@
+# --- Environment / Secrets (CRITICAL) ---
+.env
+.env.local
+.env.*
+backend/.env
+frontend/.env
+
+# --- OS / IDE Specific ---
+.DS_Store
+.vscode/
+*.swp
+
+# --- Go (Backend) ---
+backend/bin/
+backend/obj/
+backend/vendor/
+# If you build locally, ignore the executable
+backend/*.exe
+backend/backend  
+
+# --- Node / Vue (Frontend) ---
+frontend/node_modules/
+frontend/dist/
+frontend/.cache/
+frontend/npm-debug. log*
+
+# --- Docker ---
+# We keep docker-compose.yml but ignore temp docker data
+.docker/

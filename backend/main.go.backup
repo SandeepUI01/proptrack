@@ -1,0 +1,349 @@
+package main
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"fmt"
+	"log"
+	"math/rand"
+	"net/http"
+	"os"
+	"strings"
+	"sync"
+	"time"
+
+	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
+	"github.com/gorilla/websocket"
+	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/joho/godotenv"
+)
+
+// ------------------ GLOBALS ------------------
+var (
+	clients   = make(map[*websocket.Conn]bool)
+	clientsMu sync.Mutex
+	dbpool    *pgxpool.Pool // Global pool
+	aiQueue   = make(chan Incident, 100)
+)
+
+const (
+	// Reduced speed slightly for browser stability while testing AI
+	tickInterval = 800 * time.Millisecond
+	port         = ":8080"
+)
+
+var (
+	services   = []string{"auth-service", "payment-gateway", "order-engine", "search-index"}
+	severities = []string{"LOW", "MEDIUM", "HIGH", "CRITICAL"}
+)
+
+type Incident struct {
+	ID        string  `json:"id"`
+	Service   string  `json:"service"`
+	Severity  string  `json:"severity"`
+	Value     float64 `json:"value"`
+	Timestamp int64   `json:"timestamp"`
+	Message   string  `json:"message"`
+}
+
+type SearchResult struct {
+	ID         string  `json:"id"`
+	Message    string  `json:"message"`
+	Similarity float64 `json:"similarity"`
+}
+
+var upgrader = websocket.Upgrader{
+	CheckOrigin: func(r *http.Request) bool { return true },
+}
+
+// ------------------ DATABASE & AI WORKERS ------------------
+
+func startDatabaseJanitor() {
+	ticker := time.NewTicker(1 * time.Minute)
+	for range ticker.C {
+		if dbpool != nil {
+			_, err := dbpool.Exec(context.Background(),
+				"DELETE FROM incidents WHERE created_at < NOW() - INTERVAL '5 minutes'")
+			if err == nil {
+				fmt.Println("🧹 Janitor: Pruned old records.")
+			}
+		}
+	}
+}
+
+func startAIWorker() {
+	fmt.Println("🤖 AI Worker: Standing by...")
+	for inc := range aiQueue {
+		var vector []float32
+		var err error
+		maxRetries := 3
+
+		// --- OPTIMIZATION: RETRY LOOP ---
+		for i := 0; i < maxRetries; i++ {
+			vector, err = getEmbedding(inc.Message)
+			if err == nil {
+				break // Success!
+			}
+
+			// If it's a "Loading" error, wait and retry
+			if strings.Contains(err.Error(), "503") {
+				fmt.Printf("⏳ AI Model loading... retrying in %ds\n", (i+1)*5)
+				time.Sleep(time.Duration((i+1)*5) * time.Second)
+				continue
+			}
+
+			break // For other errors (like 401/404), don't retry
+		}
+
+		if err != nil {
+			fmt.Printf("⚠️ AI Skip after retries: %v\n", err)
+			continue
+		}
+
+		// --- DATABASE UPDATE ---
+		if dbpool != nil {
+			vJSON, _ := json.Marshal(vector)
+			query := `UPDATE incidents SET 
+					  embedding = $1, 
+					  metadata = metadata || '{"ai_status": "embedded"}' 
+					  WHERE id_custom = $2`
+
+			_, err := dbpool.Exec(context.Background(), query, string(vJSON), inc.ID)
+			if err != nil {
+				fmt.Printf("❌ AI DB Error: %v\n", err)
+			} else {
+				fmt.Printf("🧠 AI Intelligence Added: %s\n", inc.ID)
+			}
+		}
+	}
+}
+
+func saveToSupabase(inc Incident) {
+	if dbpool == nil {
+		return
+	}
+
+	metadata := fmt.Sprintf(`{"value": %.2f}`, inc.Value)
+	query := `INSERT INTO incidents (source, severity, message, metadata, id_custom) 
+			  VALUES ($1, $2, $3, $4, $5) 
+			  ON CONFLICT (id_custom) DO NOTHING`
+
+	_, err := dbpool.Exec(context.Background(), query, inc.Service, inc.Severity, inc.Message, metadata, inc.ID)
+	if err != nil {
+		fmt.Printf("🚨 DB ERROR: %v\n", err)
+	}
+}
+
+// ------------------ GENERATOR ------------------
+
+func generateIncident() Incident {
+	msgList := []string{
+		"Database connection timeout",
+		"High CPU usage detected",
+		"Unauthorized access attempt",
+		"API Gateway 502 error",
+		"Cache miss rate spiking",
+	}
+	return Incident{
+		ID:        uuid.New().String(),
+		Service:   services[rand.Intn(len(services))],
+		Severity:  severities[rand.Intn(len(severities))],
+		Value:     rand.Float64() * 100,
+		Timestamp: time.Now().UnixMilli(),
+		Message:   msgList[rand.Intn(len(msgList))],
+	}
+}
+
+func startEventStream() {
+	ticker := time.NewTicker(tickInterval)
+	defer ticker.Stop()
+
+	for range ticker.C {
+		batch := make([]Incident, 5)
+		for i := 0; i < 5; i++ {
+			inc := generateIncident()
+			batch[i] = inc
+
+			if inc.Severity == "HIGH" || inc.Severity == "CRITICAL" {
+				// 5% sampling rate to avoid hitting Supabase limits
+				if rand.Float64() < 0.05 {
+					go saveToSupabase(inc)
+					select {
+					case aiQueue <- inc:
+					default:
+					}
+				}
+			}
+		}
+
+		clientsMu.Lock()
+		for client := range clients {
+			err := client.WriteJSON(batch)
+			if err != nil {
+				client.Close()
+				delete(clients, client)
+			}
+		}
+		clientsMu.Unlock()
+	}
+}
+
+// ------------------ SEARCH ------------------
+func handleSearch(c *gin.Context) {
+	queryText := c.Query("q")
+	if queryText == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Query required"})
+		return
+	}
+
+	// 1. Convert Search Query to Vector using Hugging Face
+	searchVector, err := getEmbedding(queryText)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "AI failed to process query"})
+		return
+	}
+
+	// 2. Query the database using explicit type casting (::vector, ::float, ::int)
+	vJSON, _ := json.Marshal(searchVector)
+
+	// We call the SQL function we created in Supabase
+	rows, err := dbpool.Query(context.Background(),
+		"SELECT id_custom, message, similarity FROM match_incidents($1::vector, $2::float, $3::int)",
+		string(vJSON), 0.4, 5)
+
+	if err != nil {
+		fmt.Printf("Search Error: %v\n", err)
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Database search failed"})
+		return
+	}
+	defer rows.Close()
+
+	var results []SearchResult
+	for rows.Next() {
+		var res SearchResult
+		// Match the columns returned by your SQL function
+		if err := rows.Scan(&res.ID, &res.Message, &res.Similarity); err == nil {
+			results = append(results, res)
+		}
+	}
+
+	c.JSON(http.StatusOK, results)
+}
+
+// ------------------ HUGGING FACE ------------------
+
+func getEmbedding(text string) ([]float32, error) {
+	apiKey := os.Getenv("HUGGINGFACE_API_KEY")
+	model := "sentence-transformers/all-MiniLM-L6-v2"
+
+	// 🛠️ UPDATED 2026 ROUTER URL
+	// Note the specific hf-inference/models/.../pipeline/feature-extraction path
+	url := "https://router.huggingface.co/hf-inference/models/" + model + "/pipeline/feature-extraction"
+
+	payload, _ := json.Marshal(map[string]interface{}{
+		"inputs":  text, // In the 2026 router, a single string is preferred for this task
+		"options": map[string]bool{"wait_for_model": true},
+	})
+
+	req, _ := http.NewRequest("POST", url, bytes.NewBuffer(payload))
+	req.Header.Set("Authorization", "Bearer "+apiKey)
+	req.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{Timeout: 45 * time.Second}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		// This will help us see if it's still 404 or a 503 (loading) or 401 (bad token)
+		return nil, fmt.Errorf("HF API Status: %d", resp.StatusCode)
+	}
+
+	// Hugging Face now returns a flat []float32 for single inputs in this pipeline
+	var result []float32
+	if err := json.NewDecoder(resp.Body).Decode(&result); err != nil {
+		return nil, fmt.Errorf("failed to decode vector: %v", err)
+	}
+
+	if len(result) > 0 {
+		return result, nil
+	}
+
+	return nil, fmt.Errorf("empty vector returned")
+}
+
+// ------------------ MAIN ------------------
+
+func main() {
+	godotenv.Load(".env")
+	rawUrl := os.Getenv("DATABASE_URL")
+	cleanUrl := strings.TrimSpace(rawUrl)
+
+	// --- POOL CONFIGURATION ---
+	config, err := pgxpool.ParseConfig(cleanUrl)
+	if err != nil {
+		log.Fatalf("❌ Config Error: %v", err)
+	}
+
+	config.MaxConns = 5
+	config.MinConns = 1
+
+	dbpool, err = pgxpool.NewWithConfig(context.Background(), config)
+	if err != nil {
+		log.Printf("❌ DB Connection Failed: %v", err)
+	} else {
+		log.Println("✅ Supabase Connected (Max 5 Conns)!")
+	}
+
+	rand.Seed(time.Now().UnixNano())
+	gin.SetMode(gin.ReleaseMode)
+	r := gin.Default()
+
+	// 🛡️ THE PERMISSION SLIP (CORS Middleware)
+	r.Use(func(c *gin.Context) {
+		c.Writer.Header().Set("Access-Control-Allow-Origin", "http://localhost:5173") // Allow your Vue app
+		c.Writer.Header().Set("Access-Control-Allow-Methods", "GET, OPTIONS")
+		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+
+		if c.Request.Method == "OPTIONS" {
+			c.AbortWithStatus(204)
+			return
+		}
+		c.Next()
+	})
+
+	// --- ROUTES ---
+	r.GET("/ws", func(c *gin.Context) {
+		conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
+		if err != nil {
+			return
+		}
+		clientsMu.Lock()
+		clients[conn] = true
+		clientsMu.Unlock()
+		for {
+			if _, _, err := conn.NextReader(); err != nil {
+				clientsMu.Lock()
+				delete(clients, conn)
+				clientsMu.Unlock()
+				conn.Close()
+				break
+			}
+		}
+	})
+
+	// Register the search endpoint
+	r.GET("/api/search", handleSearch)
+
+	// Start background tasks
+	go startEventStream()
+	go startAIWorker()
+	go startDatabaseJanitor()
+
+	fmt.Println("🚀 Aegis Backend live on http://localhost:8080")
+	r.Run(port)
+}
