@@ -10,9 +10,8 @@ let intervalId: any = null
 let isPaused = false
 let currentSort: { key: string, dir: 'asc' | 'desc' } | null = null
 let activeFilter = 'ALL'
-let searchQuery = '' // Always defaults to string
+let searchQuery = '' 
 
-// Cache system
 let cacheDirty = true
 let cachedResult: any[] = []
 
@@ -30,6 +29,7 @@ const severityDistribution = {
 let started = false
 
 /* ---------------- PERSISTENCE ENGINE ---------------- */
+// Throttled to 5 seconds to reduce HDD head movement
 setInterval(async () => {
   if (persistenceBuffer.length === 0) return
 
@@ -41,22 +41,27 @@ setInterval(async () => {
       await db.incidents.bulkPut(toWrite)
     })
 
-    const fiveMinsAgo = Date.now() - (5 * 60 * 1000)
-    await db.incidents.where('timestamp').below(fiveMinsAgo).delete()
+    // Clean up old data to keep the DB small
+    const tenMinsAgo = Date.now() - (10 * 60 * 1000)
+    await db.incidents.where('timestamp').below(tenMinsAgo).delete()
   } catch (err) {
-    persistenceBuffer = []
+    console.error('IDB Write Error:', err)
   }
-}, 3000)
+}, 5000)
 
 /* ---------------- DATA HELPERS ---------------- */
 function processIncoming(raw: any) {
   const sev = (raw.severity || 'LOW').toUpperCase()
   const ts = raw.timestamp || Date.now()
   
+  // Track distribution for charts
+  if (severityDistribution.hasOwnProperty(sev)) {
+    severityDistribution[sev as keyof typeof severityDistribution]++
+  }
+
   return Object.freeze({
     id: raw.id || `${ts}-${Math.random()}`,
     timestamp: ts,
-    // PRE-FORMAT THE TIME HERE (Worker Thread)
     displayTime: new Date(ts).toLocaleTimeString('en-GB', { hour12: false }), 
     service: raw.service || 'unknown',
     message: raw.message || '',
@@ -66,19 +71,15 @@ function processIncoming(raw: any) {
   })
 }
 
-/* ---------------- FILTER + SORT (FIXED) ---------------- */
+/* ---------------- FILTER + SORT ---------------- */
 function getFilteredAndSortedData(sourceArray: any[]) {
   let data = sourceArray.slice()
 
-  // 1. Severity Filter
   if (activeFilter !== 'ALL') {
     data = data.filter(i => i.severity === activeFilter)
   }
 
-  // 2. Search Filter (FIXED: searchQuery.toLowerCase crash)
-  // Ensure we have a valid string and it's not just whitespace
   const safeSearch = String(searchQuery || '').trim().toLowerCase()
-  
   if (safeSearch) {
     data = data.filter(i =>
       i.serviceLower.includes(safeSearch) ||
@@ -86,19 +87,15 @@ function getFilteredAndSortedData(sourceArray: any[]) {
     )
   }
 
-  // 3. Sorting
   if (currentSort) {
     const { key, dir } = currentSort
-
     data.sort((a, b) => {
       let A = a[key]
       let B = b[key]
-
       if (key === 'severity') {
         A = _severityRank[A] || 0
         B = _severityRank[B] || 0
       }
-
       if (A === B) return 0
       const res = A > B ? 1 : -1
       return dir === 'asc' ? res : -res
@@ -115,39 +112,39 @@ function connectSocket() {
   socket = new WebSocket('ws://localhost:8080/ws')
 
   socket.onmessage = (event) => {
-    const data = JSON.parse(event.data)
-    const items = Array.isArray(data) ? data : [data]
+    try {
+        const data = JSON.parse(event.data)
+        const items = Array.isArray(data) ? data : [data]
 
-    for (let i = 0; i < items.length; i++) {
-      const processed = processIncoming(items[i])
+        for (let i = 0; i < items.length; i++) {
+          const processed = processIncoming(items[i])
 
-      mainBuffer.push(processed)
-      uiBuffer.push(processed)
+          mainBuffer.push(processed)
+          uiBuffer.push(processed)
+          persistenceBuffer.push(processed)
+          
+          cacheDirty = true
+        }
 
-      persistenceBuffer.push(processed)
-      if (persistenceBuffer.length > 5000) {
-        persistenceBuffer.splice(0, persistenceBuffer.length - 5000)
-      }
+        // 8GB RAM Safety: Keep buffers small
+        if (mainBuffer.length > 5000) {
+          mainBuffer.splice(0, mainBuffer.length - 5000)
+        }
 
-      cacheDirty = true
-    }
-
-    if (mainBuffer.length > 10000) {
-      mainBuffer.splice(0, mainBuffer.length - 10000)
-    }
-
-    if (uiBuffer.length > 400) {
-      uiBuffer.splice(0, uiBuffer.length - 200)
+        if (uiBuffer.length > 200) {
+          uiBuffer.splice(0, uiBuffer.length - 100)
+        }
+    } catch (e) {
+        console.error("Worker Parse Error", e);
     }
   }
 
-  socket.onopen = () =>
-    self.postMessage({ type: 'status', data: 'open' })
+  socket.onopen = () => self.postMessage({ type: 'status', data: 'open' })
 
   socket.onclose = () => {
     self.postMessage({ type: 'status', data: 'closed' })
     socket = null
-    setTimeout(connectSocket, 3000)
+    setTimeout(connectSocket, 5000) // Slower reconnect to save CPU
   }
 }
 
@@ -155,11 +152,12 @@ function connectSocket() {
 function startLoop() {
   if (intervalId) clearInterval(intervalId)
 
+  // 🟢 HDD FIX: Set to 1000ms. 
+  // 200ms is too fast for an HDD to handle the UI re-renders.
   intervalId = setInterval(() => {
     if (isPaused) return
 
     let finalData: any[]
-    // Added safety check for searchQuery here as well
     const hasSearch = String(searchQuery || '').trim().length > 0
     const hasHeavyOps = hasSearch || activeFilter !== 'ALL' || currentSort
 
@@ -170,22 +168,20 @@ function startLoop() {
         ? getFilteredAndSortedData(mainBuffer)
         : uiBuffer.slice() 
 
-      cachedResult =
-        processed.length > 300
-          ? processed.slice(-300).reverse()
-          : processed.slice().reverse()
-
+      // Send the latest 200 items to keep the DOM light
+      cachedResult = processed.slice(-200).reverse()
       cacheDirty = false
       finalData = cachedResult
     }
 
+    // Send data to main thread
     self.postMessage({
       type: 'batch',
-      data: finalData,
+      data: [...finalData], 
       dist: { ...severityDistribution },
       count: mainBuffer.length
     })
-  }, 200)
+  }, 1000) 
 }
 
 /* ---------------- COMMAND HANDLING ---------------- */
@@ -205,7 +201,7 @@ self.onmessage = (e) => {
       break
 
     case 'sort':
-      currentSort = value ? { key, dir } : null
+      currentSort = (key && dir) ? { key, dir } : null
       cacheDirty = true
       break
 
@@ -215,7 +211,6 @@ self.onmessage = (e) => {
       break
 
     case 'search':
-      // Ensure we store value as string to prevent downstream object crashes
       searchQuery = value || ''
       cacheDirty = true
       break

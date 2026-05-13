@@ -8,7 +8,7 @@ AEGIS-QMS is a real-time, high-throughput incident streaming system designed to 
 
 It evolved from a simple log dashboard into an AI-enhanced incident intelligence system capable of semantic understanding using vector embeddings.
 
-📊 Performance Snapshot (Day 18)
+📊 Performance Snapshot (Day 26)
 Throughput: 15k–70k events/sec (simulated WebSocket stream)
 Frontend FPS: 55–60 FPS (virtualized rendering)
 Long Tasks: 0 under normal load

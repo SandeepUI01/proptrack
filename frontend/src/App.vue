@@ -1,13 +1,13 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch, nextTick } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useIncidentStore } from './stores/useIncidentStore'
 import { createFPSMonitor, monitorLongTasks } from './utils/performance'
 import { db } from './services/idb'
+import IncidentChart from './components/IncidentChart.vue'
 
 const store = useIncidentStore()
 const sidebarRef = ref<HTMLElement | null>(null)
 const searchContainerRef = ref<HTMLElement | null>(null)
-const scrollerRef = ref<any>(null)
 
 /* ---------------- PERF METRICS ---------------- */
 const fps = ref(0)
@@ -20,13 +20,9 @@ const searchResults = ref<any[]>([])
 const isSearching = ref(false)
 let debounceTimeout: number | null = null
 
-const copyPayload = async (incident: any) => {
-  try {
-    const payload = JSON.stringify(incident, null, 2)
-    await navigator.clipboard.writeText(payload)
-  } catch (e) {
-    console.warn('Clipboard failed')
-  }
+const copyPayload = (incident: any) => {
+  const payload = JSON.stringify(incident, null, 2)
+  navigator.clipboard.writeText(payload)
 }
 
 const clearSearch = () => {
@@ -35,37 +31,24 @@ const clearSearch = () => {
   store.setSearchMode(false)
 }
 
-/* ---------------- SEARCH SELECTION (FIXED) ---------------- */
-const handleSearchSelect = async (incident: any) => {
-  clearSearch()
-
-  // Ensure we are looking at live data
-  if (store.isPaused) store.togglePause()
-
-  // Locate item in the virtualized list
-  const index = store.incidents.findIndex((i) => i.id === incident.id)
-
-  if (index !== -1 && scrollerRef.value) {
-    // Navigate scroller and open details
-    scrollerRef.value.scrollToItem(index)
-    store.selectIncident(store.incidents[index])
-  } else {
-    console.warn('Incident index not found in current buffer.')
-  }
-}
-
 /* ---------------- GLOBAL CLICK & NAVIGATION ---------------- */
 const handleGlobalClick = (e: MouseEvent) => {
   const target = e.target as HTMLElement
+
   const isClickInsideSearchInput = searchContainerRef.value?.contains(target)
   const isClickInsideSidebar = sidebarRef.value?.contains(target)
-  const isClickInsideModal = target.closest('.search-modal-content')
-  const isClickOnTableRow = target.closest('.vue-recycle-scroller__item-wrapper')
+  const isClickInsideModal = !!target.closest('.search-modal-content')
+  const isClickOnTableRow = !!target.closest('.vue-recycle-scroller__item-wrapper')
 
-  if (!isClickInsideSearchInput && !isClickInsideModal && searchQuery.value.length >= 3) {
+  // PROTECT: If clicking inside the Modal or Sidebar, abort the "close" logic
+  if (isClickInsideModal || isClickInsideSidebar) return
+
+  // Close Search only if clicking outside the modal AND the original search input
+  if (!isClickInsideSearchInput && searchQuery.value.length >= 3) {
     clearSearch()
   }
 
+  // Close Sidebar only if clicking outside sidebar, table rows, search input, and search results
   if (
     store.selectedIncident &&
     !isClickInsideSidebar &&
@@ -74,25 +57,25 @@ const handleGlobalClick = (e: MouseEvent) => {
     !isClickInsideModal
   ) {
     store.closeDetails()
-    if (store.isPaused) store.togglePause()
   }
 }
 
-// 🟢 STABILITY FIX: Throttled Scroll State
+// Updated to accept the event and stop propagation
+const handleSearchSelect = (e: MouseEvent, res: any) => {
+  e.stopPropagation() // Stops the event from reaching handleGlobalClick
+
+  if (!res?.id) return
+  const incident = store.incidents.find((i: any) => i.id === res.id)
+  store.selectIncident(incident || res)
+  // Logic remains: we do NOT call clearSearch() here so user can browse
+}
+
 const handleScroll = (() => {
   let timeout: number | null = null
   return () => {
     if (!store.isScrolling) store.setScrolling(true)
     if (timeout) clearTimeout(timeout)
-    timeout = window.setTimeout(() => {
-      store.setScrolling(false)
-
-      if (scrollerRef.value) {
-        const el = scrollerRef.value.$el
-        const atBottom = el.scrollHeight - el.scrollTop <= el.clientHeight + 50
-        if (atBottom) store.isAtBottom = true
-      }
-    }, 150)
+    timeout = window.setTimeout(() => store.setScrolling(false), 200)
   }
 })()
 
@@ -103,14 +86,12 @@ const getSeverityStyle = (s: string) => {
   if (s === 'MEDIUM') return 'bg-yellow-100 text-yellow-700 border-yellow-200'
   return 'bg-green-100 text-green-700 border-green-200'
 }
-
 const getSeverityBorder = (s: string) => {
   if (s === 'CRITICAL') return 'border-l-red-500'
   if (s === 'HIGH') return 'border-l-orange-500'
   if (s === 'MEDIUM') return 'border-l-yellow-500'
   return 'border-l-green-500'
 }
-
 const getSeverityBg = (s: string) => {
   if (s === 'CRITICAL') return 'bg-red-50'
   if (s === 'HIGH') return 'bg-orange-50'
@@ -128,7 +109,7 @@ const formatTimestamp = (ts: number) => {
   })
 }
 
-/* ---------------- PERFORMANCE SCORE ---------------- */
+/* ---------------- PERFORMANCE ---------------- */
 const performanceScore = computed(() => {
   const normalizedFPS = (fps.value / 60) * 100
   const penalty = stutters.value * 2 + longTasks.value * 5
@@ -161,22 +142,18 @@ const setSort = (key: any, forceDir?: 'asc' | 'desc') => {
 /* ---------------- AI SEARCH ENGINE ---------------- */
 const handleAISearch = () => {
   if (debounceTimeout) clearTimeout(debounceTimeout)
-
   debounceTimeout = window.setTimeout(async () => {
     if (searchQuery.value.length < 3) {
       searchResults.value = []
       store.setSearchMode(false)
       return
     }
-
     try {
       isSearching.value = true
       store.setSearchMode(true)
-
       const res = await fetch(
-        `http://localhost:8080/search?q=${encodeURIComponent(searchQuery.value)}`
+        `http://localhost:8080/api/search?q=${encodeURIComponent(searchQuery.value)}`
       )
-
       const data = await res.json()
       searchResults.value = Array.isArray(data) ? data : (data?.results ?? [])
     } catch {
@@ -189,7 +166,6 @@ const handleAISearch = () => {
 
 /* ---------------- EXPORT ---------------- */
 const isExporting = ref(false)
-
 const exportToCSV = async () => {
   try {
     isExporting.value = true
@@ -202,7 +178,6 @@ const exportToCSV = async () => {
       i.id,
       `"${i.message.replace(/"/g, '""')}"`
     ])
-
     const csv = [['Time', 'Service', 'Severity', 'Value', 'ID', 'Message'], ...rows]
       .map((r) => r.join(','))
       .join('\n')
@@ -215,7 +190,6 @@ const exportToCSV = async () => {
     isExporting.value = false
   }
 }
-
 /* ---------------- KEYBOARD SHORTCUTS ---------------- */
 const handleKeyDown = (e: KeyboardEvent) => {
   if (e.key === 'Escape') {
@@ -223,61 +197,24 @@ const handleKeyDown = (e: KeyboardEvent) => {
       clearSearch()
       return
     }
-    if (store.selectedIncident) store.closeDetails()
+    if (store.selectedIncident) {
+      store.closeDetails()
+    }
   }
 }
-
-/* ---------------- AUTO SCROLL ENGINE ---------------- */
-let isAutoScrolling = false
-
-watch(
-  () => store.incidents,
-  () => {
-    const shouldScroll =
-      !store.isScrolling &&
-      !store.isPaused &&
-      !store.hasActiveSort &&
-      !store.selectedIncident &&
-      !store.isSearching
-
-    if (shouldScroll && scrollerRef.value && !isAutoScrolling) {
-      isAutoScrolling = true
-      requestAnimationFrame(() => {
-        scrollerRef.value.scrollToItem(0)
-        isAutoScrolling = false
-      })
-    }
-  },
-  { flush: 'post' }
-)
-
-/* ---------------- LIFECYCLE ---------------- */
-onMounted(async () => {
+onMounted(() => {
   store.connect()
-
-  // Wait for DOM to ensure scroller is bound
-  await nextTick()
-
-  // Guard against null ref before store injection
-  if (scrollerRef.value) {
-    store.setScrollerRef(scrollerRef.value)
-  }
-
   createFPSMonitor((f, s) => {
     fps.value = f
     stutters.value = s
   })
-
   monitorLongTasks(() => longTasks.value++)
-
-  // Cleanup before adding to prevent HMR duplication
-  window.removeEventListener('mousedown', handleGlobalClick)
-  window.removeEventListener('keydown', handleKeyDown)
   window.addEventListener('mousedown', handleGlobalClick)
   window.addEventListener('keydown', handleKeyDown)
 })
 
 onUnmounted(() => {
+  store.disconnect()
   window.removeEventListener('mousedown', handleGlobalClick)
   window.removeEventListener('keydown', handleKeyDown)
 })
@@ -348,7 +285,7 @@ onUnmounted(() => {
               <div
                 v-for="res in searchResults"
                 :key="res.id"
-                @click="handleSearchSelect(res)"
+                @click="handleSearchSelect($event, res)"
                 :class="[
                   'relative p-6 border-b border-slate-100 hover:bg-white cursor-pointer group flex justify-between items-center transition-all border-l-4',
                   store.selectedIncident?.id === res.id ? 'bg-blue-50/80' : 'bg-transparent',
@@ -360,22 +297,37 @@ onUnmounted(() => {
                   class="absolute right-0 top-0 bottom-0 w-1 bg-blue-500"
                 ></div>
                 <div class="flex flex-col gap-1 pr-8 truncate">
-                  <span class="text-[10px] font-black text-blue-600 uppercase tracking-tighter">{{
-                    res.service
-                  }}</span>
-                  <span class="text-base font-bold italic text-slate-800 leading-tight truncate"
-                    >"{{ res.message }}"</span
-                  >
+                  <span class="text-[10px] font-black text-blue-600 uppercase tracking-tighter">
+                    {{ res?.service ?? 'Unknown Service' }}
+                  </span>
+                  <span class="text-base font-bold italic text-slate-800 leading-tight truncate">
+                    "{{ res?.message ?? 'No message available' }}"
+                  </span>
                 </div>
                 <div class="flex items-center gap-4 shrink-0">
                   <div class="text-right">
                     <div class="text-2xl font-black text-blue-600">
-                      {{ (res.similarity * 100).toFixed(0) }}%
+                      {{ ((res?.similarity ?? 0) * 100).toFixed(0) }}%
                     </div>
                     <div class="text-[9px] font-bold text-slate-400 uppercase tracking-widest">
-                      {{ res.severity }}
+                      {{ res?.severity ?? 'N/A' }}
                     </div>
                   </div>
+                  <!-- ✅ Subtle arrow icon that appears on the active item -->
+                  <svg
+                    v-if="store.selectedIncident?.id === res.id"
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="20"
+                    height="20"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="#3b82f6"
+                    stroke-width="3"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
+                    <path d="m9 18 6-6-6-6" />
+                  </svg>
                 </div>
               </div>
             </div>
@@ -472,7 +424,15 @@ onUnmounted(() => {
           <span class="text-[10px] font-semibold opacity-70 uppercase">Stutters</span>
           <span class="text-lg font-bold">{{ stutters }}</span>
         </div>
-
+        <div
+          class="px-4 py-3 rounded-xl border flex flex-col shadow-sm bg-white"
+          :class="
+            longTasks === 0 ? 'text-green-700 border-green-200' : 'text-red-700 border-red-200'
+          "
+        >
+          <span class="text-[10px] font-semibold opacity-70 uppercase">Long Tasks</span>
+          <span class="text-lg font-bold">{{ longTasks }}</span>
+        </div>
         <div ref="searchContainerRef" class="flex-1 relative mx-2">
           <div
             class="bg-white rounded-xl shadow-sm border border-slate-200 flex items-center h-[68px] px-4 transition-all focus-within:ring-2 focus-within:ring-blue-500/20 focus-within:border-blue-400"
@@ -521,7 +481,7 @@ onUnmounted(() => {
           </div>
         </div>
       </div>
-
+      <!-- <IncidentChart /> -->
       <!-- MAIN VIRTUAL TABLE -->
       <div class="flex-1 min-h-0 flex flex-col relative z-0">
         <div
@@ -581,9 +541,9 @@ onUnmounted(() => {
                   >{{ item.severity }}</span
                 >
               </div>
-              <span class="w-20 text-right font-bold text-slate-600 tabular-nums">{{
-                item.value.toFixed(2)
-              }}</span>
+              <span class="w-20 text-right font-bold text-slate-600 tabular-nums">
+                {{ item.value?.toFixed(2) ?? '0.00' }}
+              </span>
             </div>
           </RecycleScroller>
         </div>
@@ -630,7 +590,7 @@ onUnmounted(() => {
                 >Metric Value</label
               >
               <div class="bg-slate-50 p-3 border rounded-lg font-black text-center tabular-nums">
-                {{ store.selectedIncident.value.toFixed(4) }}
+                {{ store.selectedIncident.value?.toFixed(4) ?? 'N/A' }}
               </div>
             </div>
           </div>
