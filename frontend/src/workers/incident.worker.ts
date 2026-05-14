@@ -67,6 +67,7 @@ function processIncoming(raw: any) {
     service: raw.service || 'unknown',
     message: raw.message || '',
     severity: sev,
+    value: raw.value || 0,
     serviceLower: (raw.service || 'unknown').toLowerCase(),
     messageLower: (raw.message || '').toLowerCase()
   })
@@ -223,8 +224,7 @@ self.onmessage = (e) => {
       break
 
     case 'search':
-      searchQuery = value || ''
-      cacheDirty = true
+debouncedSearch(value || '');
       break
   }
 }
