@@ -61,7 +61,10 @@ export const useIncidentStore = defineStore('incident', () => {
 
     worker.onmessage = (e) => {
       const { type, data, dist, count } = e.data
-
+  
+  if (type === 'sort-complete') {
+    isSorting.value = false; // Stop spinner only when worker is actually done
+  }
       if (type === 'status') {
         connectionState.value = data
       } else if (type === 'batch') {
@@ -122,7 +125,7 @@ const disconnect = () => {
     isSorting.value = true
     hasActiveSort.value = !(key === 'timestamp' && dir === 'desc')
     worker?.postMessage({ cmd: 'sort', key, dir })
-    setTimeout(() => { isSorting.value = false }, 800)
+    //setTimeout(() => { isSorting.value = false }, 800)
   }
 
   return {

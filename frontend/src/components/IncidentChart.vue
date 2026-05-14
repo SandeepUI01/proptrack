@@ -3,96 +3,91 @@
     <div
       class="md:col-span-3 bg-white border border-slate-200 rounded-xl p-4 shadow-sm h-32 relative overflow-hidden"
     >
-      <div class="absolute top-3 left-4 z-10">
-        <span class="text-[10px] font-black text-slate-400 uppercase tracking-widest"
-          >Live Throughput Pulse</span
-        >
-      </div>
+      <span
+        class="absolute top-3 left-4 z-10 text-[10px] font-black text-slate-400 uppercase tracking-widest"
+        >Live Throughput Pulse</span
+      >
       <div ref="chartDom" class="w-full h-full"></div>
     </div>
 
     <div
-      class="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-lg h-32 flex flex-col justify-between"
+      class="bg-white border border-slate-200 rounded-xl p-4 shadow-lg h-32 flex flex-col justify-between overflow-hidden"
     >
       <span class="text-[10px] font-black text-slate-500 uppercase tracking-widest"
         >Risk Distribution</span
       >
-      <div class="flex items-end justify-between gap-1 h-12">
-        <div
-          v-for="(val, sev) in store.severityDistribution"
-          :key="sev"
-          class="flex-1 flex flex-col items-center gap-1"
-        >
-          <div
-            class="w-full rounded-t-sm transition-all duration-500"
-            :class="{
-              'bg-red-500': sev === 'CRITICAL',
-              'bg-orange-500': sev === 'HIGH',
-              'bg-yellow-500': sev === 'MEDIUM',
-              'bg-green-500': sev === 'LOW'
-            }"
-            :style="{ height: `${Math.min((val / (store.eventRate || 1)) * 100, 100)}%` }"
-          ></div>
-          <span class="text-[8px] font-bold text-slate-500">{{ sev[0] }}</span>
-        </div>
-      </div>
+      <div ref="donutDom" class="w-full h-full -mt-2"></div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref } from 'vue'
-import * as echarts from 'echarts'
+import * as echarts from 'echarts/core'
+import { LineChart, PieChart } from 'echarts/charts'
+import { GridComponent } from 'echarts/components'
+import { CanvasRenderer } from 'echarts/renderers'
 import { useIncidentStore } from '../stores/useIncidentStore'
+
+// Register ONLY what we need to keep the bundle and memory footprint tiny
+echarts.use([LineChart, PieChart, GridComponent, CanvasRenderer])
 
 const store = useIncidentStore()
 const chartDom = ref<HTMLElement | null>(null)
+const donutDom = ref<HTMLElement | null>(null)
+
 let myChart: echarts.ECharts | null = null
+let donutChart: echarts.ECharts | null = null
 let updateInterval: number | null = null
 
-// Debounced resize handler
-let resizeTimeout: number
-const handleResize = () => {
-  clearTimeout(resizeTimeout)
-  resizeTimeout = window.setTimeout(() => myChart?.resize(), 150)
-}
-
 onMounted(() => {
-  if (!chartDom.value) return
-  myChart = echarts.init(chartDom.value)
-
-  const option = {
-    backgroundColor: 'transparent',
-    grid: { top: 10, right: 10, bottom: 10, left: 10 },
-    xAxis: { type: 'category', show: false, boundaryGap: false },
-    yAxis: { type: 'value', show: false, min: 0 },
-    series: [
-      {
-        type: 'line',
-        smooth: true,
-        symbol: 'none',
-        sampling: 'lttb',
-        animation: false,
-        areaStyle: {
-          color: new echarts.graphic.LinearGradient(0, 0, 0, 1, [
-            { offset: 0, color: 'rgba(59, 130, 246, 0.3)' },
-            { offset: 1, color: 'rgba(59, 130, 246, 0)' }
-          ])
-        },
-        lineStyle: { color: '#3b82f6', width: 2 },
-        data: [...store.pulseHistory]
-      }
-    ]
+  if (chartDom.value) {
+    myChart = echarts.init(chartDom.value, undefined, { renderer: 'canvas' })
+    myChart.setOption({
+      grid: { top: 20, right: 0, bottom: 0, left: 0 },
+      xAxis: { type: 'category', show: false },
+      yAxis: { type: 'value', show: false },
+      series: [
+        {
+          type: 'line',
+          sampling: 'lttb',
+          animation: false,
+          lineStyle: { width: 1 },
+          emphasis: { disabled: true } // Memory saver
+        }
+      ]
+    })
   }
 
-  myChart.setOption(option)
-  window.addEventListener('resize', handleResize)
+  if (donutDom.value) {
+    donutChart = echarts.init(donutDom.value, undefined, { renderer: 'canvas' })
+    donutChart.setOption({
+      series: [
+        {
+          type: 'pie',
+          radius: ['50%', '80%'],
+          label: { show: false },
+          emphasis: { disabled: true } // Memory saver
+        }
+      ]
+    })
+  }
 
-  // Decoupled update loop: prevents freezing by not relying on Vue Watchers
   updateInterval = window.setInterval(() => {
-    myChart?.setOption(
+    // Direct data injection (no spread, no extra objects)
+    myChart?.setOption({ series: [{ data: store.pulseHistory }] }, false)
+    donutChart?.setOption(
       {
-        series: [{ data: [...store.pulseHistory] }]
+        series: [
+          {
+            data: [
+              { value: store.severityDistribution.CRITICAL, itemStyle: { color: '#ef4444' } },
+              { value: store.severityDistribution.HIGH, itemStyle: { color: '#f97316' } },
+              { value: store.severityDistribution.MEDIUM, itemStyle: { color: '#eab308' } },
+              { value: store.severityDistribution.LOW, itemStyle: { color: '#22c55e' } }
+            ]
+          }
+        ]
       },
       false
     )
@@ -100,8 +95,8 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
-  if (updateInterval) clearInterval(updateInterval)
-  window.removeEventListener('resize', handleResize)
+  clearInterval(updateInterval!)
   myChart?.dispose()
+  donutChart?.dispose()
 })
 </script>

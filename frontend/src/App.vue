@@ -81,10 +81,11 @@ const handleScroll = (() => {
 
 /* ---------------- HELPERS ---------------- */
 const getSeverityStyle = (s: string) => {
-  if (s === 'CRITICAL') return 'bg-red-100 text-red-600 border-red-200'
-  if (s === 'HIGH') return 'bg-orange-100 text-orange-600 border-orange-200'
-  if (s === 'MEDIUM') return 'bg-yellow-100 text-yellow-700 border-yellow-200'
-  return 'bg-green-100 text-green-700 border-green-200'
+  // We remove the 'bg-xxx' and 'border-xxx' classes
+  if (s === 'CRITICAL') return 'text-red-600'
+  if (s === 'HIGH') return 'text-orange-600'
+  if (s === 'MEDIUM') return 'text-yellow-600'
+  return 'text-green-600'
 }
 const getSeverityBorder = (s: string) => {
   if (s === 'CRITICAL') return 'border-l-red-500'
@@ -481,7 +482,7 @@ onUnmounted(() => {
           </div>
         </div>
       </div>
-      <!-- <IncidentChart /> -->
+      <IncidentChart />
       <!-- MAIN VIRTUAL TABLE -->
       <div class="flex-1 min-h-0 flex flex-col relative z-0">
         <div
@@ -521,10 +522,9 @@ onUnmounted(() => {
             <div
               @click="store.selectIncident(item)"
               :class="[
-                'flex items-center h-[44px] px-4 font-mono text-[12px] border-b cursor-pointer hover:bg-slate-50',
-                store.selectedIncident?.id === item.id
-                  ? [getSeverityBg(item.severity), 'border-l-4', getSeverityBorder(item.severity)]
-                  : 'border-l-4 border-l-transparent'
+                'flex items-center h-[44px] px-4 font-mono text-[12px] border-b cursor-pointer hover:bg-slate-50 border-l-4 transition-all',
+                getSeverityBorder(item.severity), // 👈 Always applies the color
+                store.selectedIncident?.id === item.id ? getSeverityBg(item.severity) : 'bg-white'
               ]"
             >
               <span class="w-32 text-slate-400 tabular-nums font-bold">{{
@@ -536,13 +536,14 @@ onUnmounted(() => {
               </div>
               <div class="w-24 flex justify-center">
                 <span
-                  class="w-20 text-center text-[10px] font-bold rounded py-0.5 uppercase border"
+                  class="w-20 text-center text-[10px] font-black uppercase tracking-tighter"
                   :class="getSeverityStyle(item.severity)"
-                  >{{ item.severity }}</span
                 >
+                  {{ item.severity }}
+                </span>
               </div>
               <span class="w-20 text-right font-bold text-slate-600 tabular-nums">
-                {{ item.value?.toFixed(2) ?? '0.00' }}
+                {{ item.value !== undefined ? item.value.toFixed(2) : '0.00' }}
               </span>
             </div>
           </RecycleScroller>
@@ -625,6 +626,14 @@ onUnmounted(() => {
 <style>
 .vue-recycle-scroller__item-wrapper > div:nth-child(even) {
   background-color: #f8fafc;
+}
+.vue-recycle-scroller__item-wrapper > div:nth-child(even) {
+  background-color: rgba(248, 250, 252, 0.8);
+}
+
+/* Add a hover effect to make the row pop */
+.incident-row:hover {
+  filter: brightness(0.98);
 }
 .slide-enter-active,
 .slide-leave-active {

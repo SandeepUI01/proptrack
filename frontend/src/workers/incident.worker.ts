@@ -11,6 +11,7 @@ let isPaused = false
 let currentSort: { key: string, dir: 'asc' | 'desc' } | null = null
 let activeFilter = 'ALL'
 let searchQuery = '' 
+let searchTimeout: any = null;
 
 let cacheDirty = true
 let cachedResult: any[] = []
@@ -69,6 +70,15 @@ function processIncoming(raw: any) {
     serviceLower: (raw.service || 'unknown').toLowerCase(),
     messageLower: (raw.message || '').toLowerCase()
   })
+}
+// --- Optimization: Debounced Search ---
+function debouncedSearch(query: string) {
+  if (searchTimeout) clearTimeout(searchTimeout);
+  searchTimeout = setTimeout(() => {
+    searchQuery = query;
+    cacheDirty = true;
+    // Notify main thread search logic started
+  }, 150); 
 }
 
 /* ---------------- FILTER + SORT ---------------- */
@@ -173,7 +183,9 @@ function startLoop() {
       cacheDirty = false
       finalData = cachedResult
     }
-
+if (currentSort && cacheDirty === false) {
+  self.postMessage({ type: 'sort-complete' });
+}
     // Send data to main thread
     self.postMessage({
       type: 'batch',
