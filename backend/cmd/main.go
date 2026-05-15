@@ -151,7 +151,7 @@ func handleSearch(c *gin.Context) {
 
 	rows, err := dbpool.Query(context.Background(),
 		"SELECT id_custom, message, source, severity, metadata, similarity FROM match_incidents($1::vector, $2::float8, 50)",
-		pgVec, 0.1,
+		pgVec, 0.5,
 	)
 	if err != nil {
 		log.Println("Search error:", err)

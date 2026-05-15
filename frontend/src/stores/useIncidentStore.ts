@@ -16,6 +16,8 @@ export const useIncidentStore = defineStore('incident', () => {
   const totalCount = ref(0)
   const selectedIncident = ref<any | null>(null)
   const isSearching = ref(false)
+  const globalSearchQuery = ref('')
+  const isSearchMode = ref(false)
 
   const pulseHistory = ref<number[]>(new Array(60).fill(0))
   const severityDistribution = ref({ CRITICAL: 0, HIGH: 0, MEDIUM: 0, LOW: 0 })
@@ -43,7 +45,9 @@ export const useIncidentStore = defineStore('incident', () => {
     isPaused.value = !isPaused.value
     worker?.postMessage({ cmd: 'pause', value: isPaused.value })
   }
-
+const setGlobalSearchQuery = (q: string) => {
+    globalSearchQuery.value = q
+  }
   const setSearchMode = (searching: boolean, query: string = '') => {
     isSearching.value = searching
     if (searching) isPaused.value = true
@@ -130,7 +134,9 @@ const disconnect = () => {
 
   return {
     incidents, connectionState, currentFilter, isPaused, isScrolling,
-    isSorting, isSearching, hasActiveSort, eventRate, totalCount,
+    isSorting,globalSearchQuery,
+    isSearchMode,
+    setGlobalSearchQuery, isSearching, hasActiveSort, eventRate, totalCount,
     selectedIncident, pulseHistory, severityDistribution, chartVisualData,
     scrollerInstance, isAtBottom, selectIncident, closeDetails,
     connect, disconnect, setSort, 
