@@ -30,7 +30,7 @@ export const useIncidentStore = defineStore('incident', () => {
   let flushInterval: any = null
 
   // 1. HDD STABILITY: Update UI every 1000ms instead of 16ms
-  const UI_UPDATE_INTERVAL = 1000 
+  const UI_UPDATE_INTERVAL = 500 //Updates every 500ms / 1000 for local
 
   const setScrollerRef = (el: any) => { scrollerInstance.value = el || null }
 
@@ -45,9 +45,11 @@ export const useIncidentStore = defineStore('incident', () => {
     isPaused.value = !isPaused.value
     worker?.postMessage({ cmd: 'pause', value: isPaused.value })
   }
-const setGlobalSearchQuery = (q: string) => {
+
+  const setGlobalSearchQuery = (q: string) => {
     globalSearchQuery.value = q
   }
+
   const setSearchMode = (searching: boolean, query: string = '') => {
     isSearching.value = searching
     if (searching) isPaused.value = true
@@ -66,9 +68,9 @@ const setGlobalSearchQuery = (q: string) => {
     worker.onmessage = (e) => {
       const { type, data, dist, count } = e.data
   
-  if (type === 'sort-complete') {
-    isSorting.value = false; // Stop spinner only when worker is actually done
-  }
+      if (type === 'sort-complete') {
+        isSorting.value = false // Stop spinner only when worker is actually done
+      }
       if (type === 'status') {
         connectionState.value = data
       } else if (type === 'batch') {
@@ -78,7 +80,6 @@ const setGlobalSearchQuery = (q: string) => {
         severityDistribution.value = dist
         eventCountBuffer += data.length
       }
-      
     }
 
     // Update Pulse Chart and Metrics every second
@@ -90,7 +91,28 @@ const setGlobalSearchQuery = (q: string) => {
       eventCountBuffer = 0
     }, 1000)
 
-    worker.postMessage({ cmd: 'connect' })
+    // 🚀 PRODUCTION FALLBACK GUARD:
+    // If VITE_WS_URL is missing or fails to resolve, this safely maps to your fallback domain
+    let targetWsUrl = import.meta.env.VITE_WS_URL
+
+    if (!targetWsUrl || targetWsUrl === '') {
+      console.warn("VITE_WS_URL not detected. Using client domain context string derivation.")
+      // Dynamically switches protocols based on encryption layer context
+      const isSecure = window.location.protocol === 'https:'
+      const wsProtocol = isSecure ? 'wss:' : 'ws:'
+      
+      if (window.location.hostname === 'localhost') {
+        targetWsUrl = 'ws://localhost:8080/ws'
+      } else {
+        // Production fallback logic safely maps to your explicit Railway backend production deployment URL string
+        targetWsUrl = `${wsProtocol}//your-backend-production.up.railway.app/ws`
+      }
+    }
+
+    worker.postMessage({ 
+      cmd: 'connect', 
+      url: targetWsUrl
+    })
     
     // 3. STABLE LOOP: Replace requestAnimationFrame with a fixed interval
     if (flushInterval) clearInterval(flushInterval)
@@ -116,25 +138,26 @@ const setGlobalSearchQuery = (q: string) => {
       }
     }
   }
-const disconnect = () => {
-  if (worker) {
-    worker.terminate();
-    worker = null;
+
+  const disconnect = () => {
+    if (worker) {
+      worker.terminate()
+      worker = null
+    }
+    if (perfInterval) clearInterval(perfInterval)
+    if (flushInterval) clearInterval(flushInterval)
+    connectionState.value = 'closed'
   }
-  if (perfInterval) clearInterval(perfInterval);
-  if (flushInterval) clearInterval(flushInterval);
-  connectionState.value = 'closed';
-};
+
   const setSort = (key: string, dir: 'asc' | 'desc') => {
     isSorting.value = true
     hasActiveSort.value = !(key === 'timestamp' && dir === 'desc')
     worker?.postMessage({ cmd: 'sort', key, dir })
-    //setTimeout(() => { isSorting.value = false }, 800)
   }
 
   return {
     incidents, connectionState, currentFilter, isPaused, isScrolling,
-    isSorting,globalSearchQuery,
+    isSorting, globalSearchQuery,
     isSearchMode,
     setGlobalSearchQuery, isSearching, hasActiveSort, eventRate, totalCount,
     selectedIncident, pulseHistory, severityDistribution, chartVisualData,

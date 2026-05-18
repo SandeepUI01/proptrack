@@ -16,6 +16,9 @@ let searchTimeout: any = null;
 let cacheDirty = true
 let cachedResult: any[] = []
 
+// Dynamic runtime fallback variable to store our configuration string
+let websocketUrl = 'ws://localhost:8080/ws'
+
 const _severityRank: Record<string, number> = {
   CRITICAL: 4, HIGH: 3, MEDIUM: 2, LOW: 1
 }
@@ -30,7 +33,6 @@ const severityDistribution = {
 let started = false
 
 /* ---------------- PERSISTENCE ENGINE ---------------- */
-// Throttled to 5 seconds to reduce HDD head movement
 setInterval(async () => {
   if (persistenceBuffer.length === 0) return
 
@@ -55,7 +57,6 @@ function processIncoming(raw: any) {
   const sev = (raw.severity || 'LOW').toUpperCase()
   const ts = raw.timestamp || Date.now()
   
-  // Track distribution for charts
   if (severityDistribution.hasOwnProperty(sev)) {
     severityDistribution[sev as keyof typeof severityDistribution]++
   }
@@ -72,13 +73,12 @@ function processIncoming(raw: any) {
     messageLower: (raw.message || '').toLowerCase()
   })
 }
-// --- Optimization: Debounced Search ---
+
 function debouncedSearch(query: string) {
   if (searchTimeout) clearTimeout(searchTimeout);
   searchTimeout = setTimeout(() => {
     searchQuery = query;
     cacheDirty = true;
-    // Notify main thread search logic started
   }, 150); 
 }
 
@@ -120,31 +120,31 @@ function getFilteredAndSortedData(sourceArray: any[]) {
 function connectSocket() {
   if (socket) return
 
-  socket = new WebSocket('ws://localhost:8080/ws')
+  // 🚀 FIXED: Dynamic targeting using runtime endpoint variables
+  socket = new WebSocket(websocketUrl)
 
   socket.onmessage = (event) => {
     try {
-        const data = JSON.parse(event.data)
-        const items = Array.isArray(data) ? data : [data]
+      const data = JSON.parse(event.data)
+      const items = Array.isArray(data) ? data : [data]
 
-        for (let i = 0; i < items.length; i++) {
-          const processed = processIncoming(items[i])
+      for (let i = 0; i < items.length; i++) {
+        const processed = processIncoming(items[i])
 
-          mainBuffer.push(processed)
-          uiBuffer.push(processed)
-          persistenceBuffer.push(processed)
-          
-          cacheDirty = true
-        }
+        mainBuffer.push(processed)
+        uiBuffer.push(processed)
+        persistenceBuffer.push(processed)
+        
+        cacheDirty = true
+      }
 
-        // 8GB RAM Safety: Keep buffers small
-        if (mainBuffer.length > 5000) {
-          mainBuffer.splice(0, mainBuffer.length - 5000)
-        }
+      if (mainBuffer.length > 5000) {
+        mainBuffer.splice(0, mainBuffer.length - 5000)
+      }
 
-        if (uiBuffer.length > 200) {
-          uiBuffer.splice(0, uiBuffer.length - 100)
-        }
+      if (uiBuffer.length > 200) {
+        uiBuffer.splice(0, uiBuffer.length - 100)
+      }
     } catch (e) {
         console.error("Worker Parse Error", e);
     }
@@ -155,7 +155,7 @@ function connectSocket() {
   socket.onclose = () => {
     self.postMessage({ type: 'status', data: 'closed' })
     socket = null
-    setTimeout(connectSocket, 5000) // Slower reconnect to save CPU
+    setTimeout(connectSocket, 5000)
   }
 }
 
@@ -163,8 +163,6 @@ function connectSocket() {
 function startLoop() {
   if (intervalId) clearInterval(intervalId)
 
-  // 🟢 HDD FIX: Set to 1000ms. 
-  // 200ms is too fast for an HDD to handle the UI re-renders.
   intervalId = setInterval(() => {
     if (isPaused) return
 
@@ -179,32 +177,38 @@ function startLoop() {
         ? getFilteredAndSortedData(mainBuffer)
         : uiBuffer.slice() 
 
-      // Send the latest 200 items to keep the DOM light
       cachedResult = processed.slice(-200).reverse()
       cacheDirty = false
       finalData = cachedResult
     }
-if (currentSort && cacheDirty === false) {
-  self.postMessage({ type: 'sort-complete' });
-}
-    // Send data to main thread
+    
+    if (currentSort && cacheDirty === false) {
+      self.postMessage({ type: 'sort-complete' });
+    }
+
     self.postMessage({
       type: 'batch',
       data: [...finalData], 
       dist: { ...severityDistribution },
       count: mainBuffer.length
     })
-  }, 1000) 
+  }, 500) //Updates  500ms
 }
 
 /* ---------------- COMMAND HANDLING ---------------- */
 self.onmessage = (e) => {
-  const { cmd, value, key, dir } = e.data
+  const { cmd, value, key, dir, url } = e.data
 
   switch (cmd) {
     case 'connect':
       if (started) return
       started = true
+      
+      // 🚀 FIXED: Assign injected production socket URL string before running handshake routine
+      if (url && typeof url === 'string' && url.trim() !== '') {
+        websocketUrl = url
+      }
+      
       connectSocket()
       startLoop()
       break
@@ -224,7 +228,7 @@ self.onmessage = (e) => {
       break
 
     case 'search':
-debouncedSearch(value || '');
+      debouncedSearch(value || '');
       break
   }
 }

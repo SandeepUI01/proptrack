@@ -13,7 +13,7 @@ import IncidentSidebar from './components/IncidentSidebar.vue'
 import SearchOverlay from './components/SearchOverlay.vue'
 
 const store = useIncidentStore()
-const searchContainerRef = ref<HTMLElement | null>(null)
+//const searchContainerRef = ref<HTMLElement | null>(null)
 
 /* ---------------- STATE ---------------- */
 const fps = ref(0)
@@ -25,7 +25,11 @@ const isSearching = ref(false)
 const isExporting = ref(false)
 const sortKey = ref<'timestamp' | 'value' | 'severity' | 'service'>('timestamp')
 const sortDir = ref<'asc' | 'desc'>('desc')
-let debounceTimeout: number | null = null
+let debounceTimeout: any = null // 🚀 FIXED: Standardized typing for multi-environment safety
+
+/* ---------------- PRODUCTION ENVIRONMENT SETUP ---------------- */
+// 🚀 FIXED: Dynamic targeting for HTTP endpoints using runtime environment variables
+const apiBaseUrl = import.meta.env.VITE_API_URL || 'http://localhost:8080'
 
 /* ---------------- LOGIC ---------------- */
 const clearSearch = () => {
@@ -42,7 +46,7 @@ const clearSearch = () => {
 
 const handleAISearch = () => {
   if (debounceTimeout) clearTimeout(debounceTimeout)
-  debounceTimeout = window.setTimeout(async () => {
+  debounceTimeout = setTimeout(async () => {
     // Check length here
     if (searchQuery.value.length < 3) {
       searchResults.value = [] // Clear previous results
@@ -53,9 +57,9 @@ const handleAISearch = () => {
     try {
       isSearching.value = true
       store.setSearchMode(true)
-      const res = await fetch(
-        `http://localhost:8080/api/search?q=${encodeURIComponent(searchQuery.value)}`
-      )
+
+      // 🚀 FIXED: Interpolate the clean dynamic base url into your search action query string
+      const res = await fetch(`${apiBaseUrl}/api/search?q=${encodeURIComponent(searchQuery.value)}`)
       const data = await res.json()
       searchResults.value = Array.isArray(data) ? data : (data?.results ?? [])
     } catch {
@@ -192,6 +196,7 @@ onMounted(() => {
 
 onUnmounted(() => {
   store.disconnect()
+  if (debounceTimeout) clearTimeout(debounceTimeout) // 🚀 FIXED: Clear active timeouts to avoid thread memory leak cascades
   window.removeEventListener('mousedown', handleGlobalClick)
   window.removeEventListener('keydown', handleKeyDown)
 })

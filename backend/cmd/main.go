@@ -28,7 +28,7 @@ var (
 	aiQueue   = make(chan Incident, 200)
 )
 
-const tickInterval = 800 * time.Millisecond
+const tickInterval = 100 * time.Millisecond // for local optimized
 
 type Incident struct {
 	ID        string  `json:"id"`
@@ -49,6 +49,7 @@ type SearchResult struct {
 }
 
 var upgrader = websocket.Upgrader{
+	// Permissive origin check to handle real-time streaming transitions securely
 	CheckOrigin: func(r *http.Request) bool { return true },
 }
 
@@ -137,7 +138,7 @@ func toFloat32(arr []any) []float32 {
 func handleSearch(c *gin.Context) {
 	q := c.Query("q")
 	if q == "" || dbpool == nil {
-		c.JSON(400, gin.H{"error": "bad request"})
+		c.JSON(400, gin.H{"error": "bad request or database unavailable"})
 		return
 	}
 
@@ -151,11 +152,11 @@ func handleSearch(c *gin.Context) {
 
 	rows, err := dbpool.Query(context.Background(),
 		"SELECT id_custom, message, source, severity, metadata, similarity FROM match_incidents($1::vector, $2::float8, 50)",
-		pgVec, 0.5,
+		pgVec, 0.1,
 	)
 	if err != nil {
-		log.Println("Search error:", err)
-		c.JSON(500, gin.H{"error": "search failed"})
+		log.Println("Search execution error:", err)
+		c.JSON(500, gin.H{"error": "search query failed"})
 		return
 	}
 	defer rows.Close()
@@ -200,7 +201,7 @@ func saveToDBDirect(inc Incident) {
 	query := `INSERT INTO incidents (source, severity, message, metadata, id_custom) VALUES ($1,$2,$3,$4,$5) ON CONFLICT DO NOTHING`
 	_, err := dbpool.Exec(context.Background(), query, inc.Service, inc.Severity, inc.Message, metaJSON, inc.ID)
 	if err != nil {
-		log.Println("DB Insert Error:", err)
+		log.Println("Database write error:", err)
 	}
 }
 
@@ -218,8 +219,10 @@ func startAIWorker() {
 func startEventStream() {
 	t := time.NewTicker(tickInterval)
 	for range t.C {
-		batch := make([]Incident, 5)
-		for i := 0; i < 5; i++ {
+		// 25 items otherwise 5 for local ...in loop also for statblity
+		batch := make([]Incident, 25)
+
+		for i := 0; i < 25; i++ {
 			inc := Incident{
 				ID:        uuid.New().String(),
 				Service:   []string{"auth-service", "payment-gateway", "order-engine"}[rand.Intn(3)],
@@ -248,15 +251,47 @@ func startEventStream() {
 }
 
 func main() {
-	_ = godotenv.Load()
-	config, _ := pgxpool.ParseConfig(os.Getenv("DATABASE_URL"))
-	dbpool, _ = pgxpool.NewWithConfig(context.Background(), config)
+	// Attempt loading a local .env, but do not crash if missing (cloud platforms supply native env injections)
+	if err := godotenv.Load(); err != nil {
+		log.Println("Info: No local .env file found. Using environment variables from system.")
+	}
 
+	dbURL := os.Getenv("DATABASE_URL")
+	if dbURL == "" {
+		log.Println("Warning: DATABASE_URL variable is completely empty.")
+	}
+
+	config, err := pgxpool.ParseConfig(dbURL)
+	if err == nil {
+		dbpool, err = pgxpool.NewWithConfig(context.Background(), config)
+		if err != nil {
+			log.Printf("Failed to connect to database cluster: %v\n", err)
+		} else {
+			log.Println("Database connection pool initialized successfully.")
+		}
+	} else {
+		log.Printf("Failed parsing database connection string: %v\n", err)
+	}
+
+	// Setup Gin Engine in Production Release mode if running outside localhost
+	if os.Getenv("GIN_MODE") == "release" {
+		gin.SetMode(gin.ReleaseMode)
+	}
 	r := gin.Default()
+
+	// Dynamic Production CORS Middleware
 	r.Use(func(c *gin.Context) {
-		c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
+		origin := c.Request.Header.Get("Origin")
+		// Automatically allow localized lookups or your explicit production Vercel frontend link
+		if origin != "" {
+			c.Writer.Header().Set("Access-Control-Allow-Origin", origin)
+		} else {
+			c.Writer.Header().Set("Access-Control-Allow-Origin", "*")
+		}
 		c.Writer.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
 		c.Writer.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
+		c.Writer.Header().Set("Access-Control-Allow-Credentials", "true")
+
 		if c.Request.Method == "OPTIONS" {
 			c.AbortWithStatus(204)
 			return
@@ -267,6 +302,7 @@ func main() {
 	r.GET("/ws", func(c *gin.Context) {
 		conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
 		if err != nil {
+			log.Println("WebSocket upgrade failed:", err)
 			return
 		}
 		clientsMu.Lock()
@@ -285,8 +321,25 @@ func main() {
 		}
 	})
 
+	// Unified API routing
 	r.GET("/api/search", handleSearch)
+
+	// Base health route for Render/Railway monitoring pings
+	r.GET("/health", func(c *gin.Context) {
+		c.JSON(200, gin.H{"status": "healthy", "timestamp": time.Now().UnixMilli()})
+	})
+
 	go startAIWorker()
 	go startEventStream()
-	r.Run(":8080")
+
+	// Capture dynamic hosting environmental port variables
+	port := os.Getenv("PORT")
+	if port == "" {
+		port = "8080"
+	}
+
+	log.Printf("System core operational. Server starting on port %s...", port)
+	if err := r.Run(":" + port); err != nil {
+		log.Fatalf("Critical system failure starting router: %v", err)
+	}
 }

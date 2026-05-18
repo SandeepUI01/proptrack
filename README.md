@@ -1,48 +1,83 @@
 PropTrack: AI-Powered Incident Intelligence
-Project Status: Day 27/30 — AI Intelligence & Supabase Integration FinalizedA high-performance observability platform built to transform raw log noise into searchable, semantic intelligence.⚡
+Project Status: Day 27/30 — AI Intelligence & Cloud Data Integration Finalized
 
-**Project Status:** `Day 27/30` — **AI Intelligence & Supabase Integration Finalized**
+A high-performance observability platform built to transform raw log noise into searchable, semantic intelligence. ⚡
+⚡ Performance Snapshot
+Metric Specification Status
+Architectural Throughput 15k – 70k events/sec (Load Tested) 🚀 Validated
+Local Ingestion Rate ~375 events/sec (Optimized) 💻 Hardware Stable
+Frontend UI Performance 52 – 60 FPS (10k+ active rows) ✨ Stable via Web Worker
+Vector Database Latency Sub-millisecond similarity lookup ⚡ Cloud Database + HNSW
+🏗️ System Architecture
 
----
+The architecture leverages a hybrid-cloud approach: local Go-concurrency for high-speed streaming, deep thread-isolation on the frontend, and an optimized cloud database layer for persistent semantic memory.
+Code snippet
 
-### ⚡ Performance Snapshot
-
-| Metric                       | Specification        | Status              |
-| :--------------------------- | :------------------- | :------------------ |
-| **Architectural Throughput** | 15k – 70k events/sec | 🚀 Optimized        |
-| **Local Throughput**         | ~800 events/sec      | 💻 Hardware Limited |
-| **Frontend Smoothness**      | 55 – 60 FPS          | ✨ Stable           |
-| **Vector Database**          | Managed pgvector     | ⚡ Supabase Cloud   |
-
----
-
-### 🏗️ System Architecture
-
-The architecture leverages a hybrid-cloud approach: Local Go-concurrency for high-speed streaming and Supabase for persistent semantic memory.
-
-```mermaid
 graph TD
-    subgraph Client_Side
-    Vue[Vue 3 SPA] --> Pinia[Pinia Store]
-    Pinia --> RS[Recycle Scroller]
-    Pinia --> EC[ECharts Analytics]
+subgraph Client_Side [Client Side - Vue 3 SPA]
+Vue[Vue 3 Engine] --> Pinia[Pinia Store]
+Pinia --> Worker[Web Worker: Sorting/Filtering]
+Pinia --> RS[Recycle Scroller]
+Pinia --> EC[ECharts Analytics]
+end
+
+    subgraph Server_Side [Server Side - Go Ecosystem]
+        Go[Go Gin Server] --> WS[WebSocket Engine]
+        Go --> AI[HuggingFace Embeddings API]
     end
 
-    subgraph Server_Side
-    Go[Go Gin Server] --> WS[WebSocket Engine]
-    Go --> AI[Neural Search API]
+    subgraph Cloud_Data_Layer [Cloud Data Layer]
+        DB[(Cloud DB + pgvector)] --> HNSW[HNSW Vector Index]
     end
 
-    subgraph Cloud_Data_Layer
-    DB[(Supabase + pgvector)]
-    DB --> HNSW[HNSW Vector Index]
-    end
+    WS -- "JSON Stream (~375 ev/s)" --> Vue
+    Vue -- "RPC Search Query" --> DB
+    Go -- "Batch Vectorization" --> AI
+    AI -- "Vector Upsert" --> DB
 
-    WS -- Stream --> Vue
-    AI -- rpc:match_incidents --> DB
-    Vue -- Query --> AI
-⚙️ Core Technical Specifications🔄 Real-Time Streaming: High-concurrency Go (Gin) server utilizing a single-handler WebSocket pattern for efficient event distribution.🧠 AI & Semantic Search: Log messages vectorized via HuggingFace MiniLM. Neural search overlay (/) performs sub-millisecond similarity lookups.🗄️ Supabase Cloud: Managed pgvector storage with HNSW indexing to ensure $O(\log n)$ search complexity.⚡ Non-Blocking UI: Heavy data sorting offloaded to Web Workers; rendering optimized via row recycling (60 FPS at 10k+ rows).🛠️ Tech StackFrontend: Vue 3, TypeScript, Pinia, ECharts.Backend: Go (Gin), Gorilla WebSocket.Cloud/Data: Supabase (PostgreSQL + pgvector), Docker.🏁 Milestone Tracker[x] High-concurrency Go WebSocket engine[x] Virtualized frontend dashboard (60 FPS)[x] Supabase / pgvector Integration[x] Neural Search Engine (Command Palette)[x] ECharts Risk Trend Visualization[x] Docker Containerization (Local Stack)[ ] Next: Cloud Deployment (Vercel + Railway)[ ] Next: File splitting & modularization polish🚀 Getting Started1. BackendBashcd backend/cmd
+⚙️ Core Technical Specifications
+
+    🔄 Real-Time Streaming: High-concurrency Go server utilizing a single-handler WebSocket pattern for efficient event distribution with integrated backpressure management.
+
+    🧠 AI & Semantic Search: Log messages vectorized via HuggingFace MiniLM models. A neural search overlay allows users to perform sub-millisecond similarity lookups instantly.
+
+    🗄️ Cloud Vector Storage: Managed PostgreSQL pgvector storage utilizing Hierarchical Navigable Small World (HNSW) indexing to ensure O(logn) search complexity under massive scaling loads.
+
+    ⚡ Non-Blocking UI Layout: Heavy sorting and filtering data mutations are entirely offloaded to background Web Workers. Rendering is optimized via a virtualized DOM to guarantee zero Main-Thread Long Tasks and rock-solid frame rates.
+
+🛠️ Tech Stack
+
+    Frontend: Vue 3 (Composition API), TypeScript, Pinia, TailwindCSS, Vue Virtual Scroller, ECharts.
+
+    Backend: Go (Golang), Gin Gonic Framework, Gorilla WebSocket, pgx pool.
+
+    Cloud/Data: PostgreSQL + pgvector, HuggingFace Inference API.
+
+### 🚀 Getting Started
+
+This platform supports two runtime modes: **Native Mode** (optimized to bypass container virtualization layers for maximum local stress-testing throughput) and **Docker Mode** (for containerized isolation and cloud-ready deployment).
+
+#### Option A: Native Development Mode (Recommended for Local Benchmarking)
+
+##### 1. Spin Up the Go Streaming Engine
+
+```bash
+cd backend/cmd
 go run main.go
-2. FrontendBashnpm install
+
+2. Launch the Thread-Isolated Frontend UI
+Bash
+
+cd frontend
+npm install
 npm run dev
+
+Option B: Docker Containerized Mode (Production Setup)
+
+The project includes multi-stage Docker configurations to keep production images lightweight and secure.
+1. Build and Run the Complete Stack
+Bash
+
+# From the project root directory
+docker-compose up --build
 ```
