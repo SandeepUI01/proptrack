@@ -1,83 +1,119 @@
-PropTrack: AI-Powered Incident Intelligence
-Project Status: Day 27/30 — AI Intelligence & Cloud Data Integration Finalized
+# PropTrack: AI-Powered Incident Intelligence
+
+### **Project Status: Day 27/30 — Cloud Production & Pipeline Integration Finalized**
 
 A high-performance observability platform built to transform raw log noise into searchable, semantic intelligence. ⚡
-⚡ Performance Snapshot
-Metric Specification Status
-Architectural Throughput 15k – 70k events/sec (Load Tested) 🚀 Validated
-Local Ingestion Rate ~375 events/sec (Optimized) 💻 Hardware Stable
-Frontend UI Performance 52 – 60 FPS (10k+ active rows) ✨ Stable via Web Worker
-Vector Database Latency Sub-millisecond similarity lookup ⚡ Cloud Database + HNSW
-🏗️ System Architecture
 
-The architecture leverages a hybrid-cloud approach: local Go-concurrency for high-speed streaming, deep thread-isolation on the frontend, and an optimized cloud database layer for persistent semantic memory.
-Code snippet
+---
 
+## ⚡ Performance Snapshot
+
+| Metric                       | Specification                      | Environment      | Status                   |
+| :--------------------------- | :--------------------------------- | :--------------- | :----------------------- |
+| **Architectural Throughput** | 15k – 70k events/sec (Load Tested) | Go Concurrency   | 🚀 Validated             |
+| **Local Ingestion Rate**     | ~375 events/sec (Optimized)        | Local Hardware   | 💻 Stable                |
+| **Frontend UI Performance**  | 52 – 60 FPS (10k+ active rows)     | Vercel Live Edge | ✨ Stable via Web Worker |
+| **Vector Database Latency**  | Sub-millisecond similarity lookup  | Supabase Cloud   | ⚡ Cloud DB + HNSW       |
+
+---
+
+## 🏗️ System Architecture
+
+The architecture leverages a hybrid-cloud approach: local or containerized Go-concurrency for high-speed streaming, deep thread-isolation on the frontend, and a fully distributed cloud data layer for persistent semantic memory.
+
+```mermaid
 graph TD
-subgraph Client_Side [Client Side - Vue 3 SPA]
-Vue[Vue 3 Engine] --> Pinia[Pinia Store]
-Pinia --> Worker[Web Worker: Sorting/Filtering]
-Pinia --> RS[Recycle Scroller]
-Pinia --> EC[ECharts Analytics]
-end
+    subgraph Client_Side [Client Side - Vue 3 SPA Hosted on Vercel]
+        Vue[Vue 3 Engine + Vite] --> Pinia[Pinia Store]
+        Pinia --> Worker[Web Worker: Sorting/Filtering]
+        Pinia --> RS[Recycle Scroller]
+        Pinia --> EC[ECharts Analytics]
+    end
 
-    subgraph Server_Side [Server Side - Go Ecosystem]
+    subgraph Server_Side [Server Side - Go Ecosystem Hosted on Render]
         Go[Go Gin Server] --> WS[WebSocket Engine]
         Go --> AI[HuggingFace Embeddings API]
     end
 
-    subgraph Cloud_Data_Layer [Cloud Data Layer]
-        DB[(Cloud DB + pgvector)] --> HNSW[HNSW Vector Index]
+    subgraph Cloud_Data_Layer [Cloud Data Layer - Supabase Cluster]
+        DB[(PostgreSQL + pgvector)] --> HNSW[HNSW Vector Index]
     end
 
-    WS -- "JSON Stream (~375 ev/s)" --> Vue
-    Vue -- "RPC Search Query" --> DB
+    WS -- "wss:// JSON Stream" --> Pinia
+    Vue -- "https:// HTTP API Calls" --> Go
     Go -- "Batch Vectorization" --> AI
-    AI -- "Vector Upsert" --> DB
+    AI -- "Vector Upsert / Query Comparison" --> DB
+```
 
-⚙️ Core Technical Specifications
+---
 
-    🔄 Real-Time Streaming: High-concurrency Go server utilizing a single-handler WebSocket pattern for efficient event distribution with integrated backpressure management.
+## ⚙️ Core Technical Specifications
 
-    🧠 AI & Semantic Search: Log messages vectorized via HuggingFace MiniLM models. A neural search overlay allows users to perform sub-millisecond similarity lookups instantly.
+- **🔄 Real-Time Streaming Engine:** High-concurrency Go server utilizing a single-handler WebSocket pattern for low-latency event distribution with built-in connection recovery and backpressure management.
+- **🧠 AI & Semantic Memory:** Log messages are converted into vectorized payloads via the HuggingFace MiniLM inference models. A neural search overlay allows users to execute context-aware similarity lookups instantly.
+- **🗄️ Production Vector Storage:** Distributed cloud PostgreSQL database (`pgvector`) powered by **Hierarchical Navigable Small World (HNSW)** indexing to guarantee $O(\log n)$ search complexity under scaling production data loads.
+- **⚡ Thread-Isolated UI Pipeline:** Heavy data manipulations, array sorting, and pattern filtration are fully offloaded to background **Web Workers**. Rendering is constrained via a virtualized DOM to eliminate Main-Thread Long Tasks and lock down stable frame rates.
 
-    🗄️ Cloud Vector Storage: Managed PostgreSQL pgvector storage utilizing Hierarchical Navigable Small World (HNSW) indexing to ensure O(logn) search complexity under massive scaling loads.
+---
 
-    ⚡ Non-Blocking UI Layout: Heavy sorting and filtering data mutations are entirely offloaded to background Web Workers. Rendering is optimized via a virtualized DOM to guarantee zero Main-Thread Long Tasks and rock-solid frame rates.
+## 🛠️ Tech Stack
 
-🛠️ Tech Stack
+- **Frontend:** Vue 3 (Composition API), Pinia, Vite, TailwindCSS, Vue Virtual Scroller, ECharts.
+- **Backend:** Go (Golang), Gin Gonic, Gorilla WebSocket, `pgx/v5` Connection Pool.
+- **Cloud / Data Layer:** Supabase Cloud (Postgres), HuggingFace Serverless Inference API, Vercel (Edge UI Deployment), Render (Managed API Engine).
 
-    Frontend: Vue 3 (Composition API), TypeScript, Pinia, TailwindCSS, Vue Virtual Scroller, ECharts.
-
-    Backend: Go (Golang), Gin Gonic Framework, Gorilla WebSocket, pgx pool.
-
-    Cloud/Data: PostgreSQL + pgvector, HuggingFace Inference API.
+---
 
 ### 🚀 Getting Started
 
-This platform supports two runtime modes: **Native Mode** (optimized to bypass container virtualization layers for maximum local stress-testing throughput) and **Docker Mode** (for containerized isolation and cloud-ready deployment).
+This platform can be reviewed through its live cloud production URLs, or spun up locally across native benchmark or container environments.
 
-#### Option A: Native Development Mode (Recommended for Local Benchmarking)
+#### 🌍 Production Environment (Cloud Deployment)
+
+The environment variables for the live application link the Vite client assets securely to your cloud cluster components:
+
+- **API Gateway (HTTP):** `https://proptrack-backend.onrender.com`
+- **Real-Time Gateway (WS):** `wss://proptrack-backend.onrender.com/ws`
+
+---
+
+#### 💻 Option A: Native Development Mode (Recommended for Local Benchmarking)
 
 ##### 1. Spin Up the Go Streaming Engine
 
 ```bash
-cd backend/cmd
-go run main.go
+cd backend
+# Verify your local .env file contains your Supabase DATABASE_URL & HUGGINGFACE_TOKEN
+go build -o main ./cmd/main.go
+./main
+```
 
-2. Launch the Thread-Isolated Frontend UI
-Bash
+##### 2. Launch the Thread-Isolated Frontend UI
 
+```bash
 cd frontend
 npm install
 npm run dev
+```
 
-Option B: Docker Containerized Mode (Production Setup)
+_Your application will look for local variables using the Vite format (`VITE_API_URL=http://localhost:8080`)._
 
-The project includes multi-stage Docker configurations to keep production images lightweight and secure.
-1. Build and Run the Complete Stack
-Bash
+---
 
-# From the project root directory
+#### 🐋 Option B: Docker Containerized Mode (Production Simulation)
+
+The project utilizes multi-stage Docker configurations to separate structural source compilations from the runtime environment, keeping container images extremely lightweight.
+
+```bash
+# Execute from the project root directory containing the docker-compose.yml file
 docker-compose up --build
 ```
+
+---
+
+### 🔄 CI/CD Production Integration
+
+The production pipeline utilizes an automated Git-Ops workflow:
+
+1. **Frontend (`/frontend`) ➡️ Vercel:** Any code branch updates merged to production trigger a silent build hook on Vercel. Vue SFCs are minified, assets are chunked via Vite, and static targets are refreshed with zero site downtime.
+2. **Backend (`/backend`) ➡️ Render:** Pushes to your tracked branch signal the Render engine. The environment steps directly into the root folder directory, builds the updated native binary (`go build -o main ./cmd/main.go`), and boots the application server running over port environment variables.

@@ -205,6 +205,7 @@ onUnmounted(() => {
   <div
     class="p-6 h-screen flex flex-col bg-slate-50 font-sans relative overflow-hidden text-slate-900"
   >
+    <!-- GLOBAL AI SEARCH MODAL OVERLAY -->
     <SearchOverlay
       v-model:searchQuery="searchQuery"
       :isSearching="isSearching"
@@ -216,7 +217,43 @@ onUnmounted(() => {
       @select="handleSearchSelect"
     />
 
-    <div class="relative z-1 flex flex-col h-full">
+    <!-- 1. ENGINE COLD-START LOADER LAYER -->
+    <!-- Renders if the array is empty AND the store connection is initializing -->
+    <div
+      v-if="store.incidents.length === 0"
+      class="relative z-1 flex flex-col items-center justify-center h-full max-w-xl mx-auto text-center px-4 space-y-6"
+    >
+      <!-- Tech-Forward High Performance Loading Animation -->
+      <div class="relative flex items-center justify-center">
+        <div
+          class="animate-spin rounded-full h-16 w-16 border-4 border-slate-200 border-b-indigo-600"
+        ></div>
+        <span class="absolute text-xs font-mono font-bold text-indigo-600 animate-pulse">GO</span>
+      </div>
+
+      <div class="space-y-2">
+        <h3 class="text-xl font-bold tracking-tight text-slate-800">
+          Initializing Observability Gateway
+        </h3>
+        <p class="text-slate-500 text-sm font-medium leading-relaxed">
+          Establishing dynamic single-handler WebSocket tunnels to high-throughput streaming
+          architecture...
+        </p>
+      </div>
+
+      <!-- Graceful indicator handling Render's free container wake-up cycles -->
+      <div
+        class="w-full text-xs text-amber-700 bg-amber-50/80 backdrop-blur border border-amber-200/60 p-4 rounded-xl shadow-sm animate-pulse"
+      >
+        ⏳ <strong class="font-semibold">Cloud Infrastructure Note:</strong> The high-performance Go
+        microservice is spinning up from cold storage on its cloud instance. Initial image boot can
+        require up to 60 seconds. Subsequent operational telemetry streams will be sub-millisecond.
+      </div>
+    </div>
+
+    <!-- 2. FULL REAL-TIME ANALYTICS DASHBOARD LAYER -->
+    <!-- Swaps in cleanly once the first packet drops over the WebSocket -->
+    <div v-else class="relative z-1 flex flex-col h-full">
       <TheHeader
         :performanceScore="performanceScore"
         :scoreLabel="scoreLabel"
@@ -246,6 +283,7 @@ onUnmounted(() => {
       />
     </div>
 
+    <!-- SIDEBAR DRAWER OVERLAY -->
     <IncidentSidebar :getSeverityStyle="getSeverityStyle" />
   </div>
 </template>

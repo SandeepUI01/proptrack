@@ -219,7 +219,6 @@ func startAIWorker() {
 func startEventStream() {
 	t := time.NewTicker(tickInterval)
 	for range t.C {
-		// 25 items otherwise 5 for local ...in loop also for statblity
 		batch := make([]Incident, 25)
 
 		for i := 0; i < 25; i++ {
@@ -251,7 +250,6 @@ func startEventStream() {
 }
 
 func main() {
-	// Attempt loading a local .env, but do not crash if missing (cloud platforms supply native env injections)
 	if err := godotenv.Load(); err != nil {
 		log.Println("Info: No local .env file found. Using environment variables from system.")
 	}
@@ -273,16 +271,13 @@ func main() {
 		log.Printf("Failed parsing database connection string: %v\n", err)
 	}
 
-	// Setup Gin Engine in Production Release mode if running outside localhost
 	if os.Getenv("GIN_MODE") == "release" {
 		gin.SetMode(gin.ReleaseMode)
 	}
 	r := gin.Default()
 
-	// Dynamic Production CORS Middleware
 	r.Use(func(c *gin.Context) {
 		origin := c.Request.Header.Get("Origin")
-		// Automatically allow localized lookups or your explicit production Vercel frontend link
 		if origin != "" {
 			c.Writer.Header().Set("Access-Control-Allow-Origin", origin)
 		} else {
@@ -300,6 +295,12 @@ func main() {
 	})
 
 	r.GET("/ws", func(c *gin.Context) {
+		// ⏳ LOCAL COLD-START SIMULATION
+		// Pauses this route execution to let you inspect the frontend loading and warning elements
+		log.Println("⏳ Simulating Render container boot cycle context. Frontend loader active...")
+		//time.Sleep(6 * time.Second) // to test UI loader before go connection acive
+		log.Println("🔓 Boot cycle window simulated. Upgrading link to real-time engine.")
+
 		conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
 		if err != nil {
 			log.Println("WebSocket upgrade failed:", err)
@@ -321,10 +322,8 @@ func main() {
 		}
 	})
 
-	// Unified API routing
 	r.GET("/api/search", handleSearch)
 
-	// Base health route for Render/Railway monitoring pings
 	r.GET("/health", func(c *gin.Context) {
 		c.JSON(200, gin.H{"status": "healthy", "timestamp": time.Now().UnixMilli()})
 	})
@@ -332,14 +331,12 @@ func main() {
 	go startAIWorker()
 	go startEventStream()
 
-	// Capture dynamic hosting environmental port variables
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8080"
 	}
 
 	log.Printf("System core operational. Server starting on port %s...", port)
-	// 🚀 UPDATED: Binds to 0.0.0.0 to allow both native local runs AND Docker/Railway proxy routing
 	if err := r.Run("0.0.0.0:" + port); err != nil {
 		log.Fatalf("Critical system failure starting router: %v", err)
 	}

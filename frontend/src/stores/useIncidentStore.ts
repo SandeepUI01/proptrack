@@ -19,6 +19,10 @@ export const useIncidentStore = defineStore('incident', () => {
   const globalSearchQuery = ref('')
   const isSearchMode = ref(false)
 
+  // ⏳ New Cold Start States
+  const isColdStart = ref(false)
+  let coldStartTimer: any = null
+
   const pulseHistory = ref<number[]>(new Array(60).fill(0))
   const severityDistribution = ref({ CRITICAL: 0, HIGH: 0, MEDIUM: 0, LOW: 0 })
   const chartVisualData = ref({ CRITICAL: 0, HIGH: 0, MEDIUM: 0, LOW: 0 })
@@ -59,6 +63,14 @@ export const useIncidentStore = defineStore('incident', () => {
   const connect = () => {
     if (worker) return
     connectionState.value = 'connecting'
+    isColdStart.value = false
+
+    // ⏳ Trigger warning if the engine doesn't emit data arrays within 4 seconds
+    coldStartTimer = setTimeout(() => {
+      if (incidents.value.length === 0) {
+        isColdStart.value = true
+      }
+    }, 4000)
 
     worker = new Worker(
       new URL('../workers/incident.worker.ts', import.meta.url),
@@ -74,6 +86,13 @@ export const useIncidentStore = defineStore('incident', () => {
       if (type === 'status') {
         connectionState.value = data
       } else if (type === 'batch') {
+        // 🎉 Data dropped! Clear cold start tracking completely
+        if (coldStartTimer) {
+          clearTimeout(coldStartTimer)
+          coldStartTimer = null
+        }
+        isColdStart.value = false
+
         // 2. MEMORY GUARD: markRaw prevents Vue from making these thousands of objects reactive
         latestBatch = markRaw(Object.freeze(data))
         totalCount.value = count
@@ -97,15 +116,14 @@ export const useIncidentStore = defineStore('incident', () => {
 
     if (!targetWsUrl || targetWsUrl === '') {
       console.warn("VITE_WS_URL not detected. Using client domain context string derivation.")
-      // Dynamically switches protocols based on encryption layer context
       const isSecure = window.location.protocol === 'https:'
       const wsProtocol = isSecure ? 'wss:' : 'ws:'
       
       if (window.location.hostname === 'localhost') {
         targetWsUrl = 'ws://localhost:8080/ws'
       } else {
-        // Production fallback logic safely maps to your explicit Railway backend production deployment URL string
-        targetWsUrl = `${wsProtocol}//your-backend-production.up.railway.app/ws`
+        // Production fallback logic maps safely to your Render production engine deployment
+        targetWsUrl = `${wsProtocol}//proptrack-backend.onrender.com/ws`
       }
     }
 
@@ -131,7 +149,7 @@ export const useIncidentStore = defineStore('incident', () => {
       incidents.value = latestBatch
       
       if (isAtBottom.value && scrollerInstance.value) {
-        // Use a timeout to give the HDD time to finish rendering the DOM
+        // Use a timeout to give the DOM time to finish rendering
         setTimeout(() => {
           scrollerInstance.value?.scrollToItem?.(0)
         }, 60)
@@ -144,8 +162,13 @@ export const useIncidentStore = defineStore('incident', () => {
       worker.terminate()
       worker = null
     }
+    if (coldStartTimer) {
+      clearTimeout(coldStartTimer)
+      coldStartTimer = null
+    }
     if (perfInterval) clearInterval(perfInterval)
     if (flushInterval) clearInterval(flushInterval)
+    isColdStart.value = false
     connectionState.value = 'closed'
   }
 
@@ -157,8 +180,7 @@ export const useIncidentStore = defineStore('incident', () => {
 
   return {
     incidents, connectionState, currentFilter, isPaused, isScrolling,
-    isSorting, globalSearchQuery,
-    isSearchMode,
+    isSorting, globalSearchQuery, isSearchMode, isColdStart, // Added to return properties
     setGlobalSearchQuery, isSearching, hasActiveSort, eventRate, totalCount,
     selectedIncident, pulseHistory, severityDistribution, chartVisualData,
     scrollerInstance, isAtBottom, selectIncident, closeDetails,
