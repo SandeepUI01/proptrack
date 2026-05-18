@@ -13,7 +13,6 @@ import IncidentSidebar from './components/IncidentSidebar.vue'
 import SearchOverlay from './components/SearchOverlay.vue'
 
 const store = useIncidentStore()
-//const searchContainerRef = ref<HTMLElement | null>(null)
 
 /* ---------------- STATE ---------------- */
 const fps = ref(0)
@@ -25,7 +24,7 @@ const isSearching = ref(false)
 const isExporting = ref(false)
 const sortKey = ref<'timestamp' | 'value' | 'severity' | 'service'>('timestamp')
 const sortDir = ref<'asc' | 'desc'>('desc')
-let debounceTimeout: any = null // 🚀 FIXED: Standardized typing for multi-environment safety
+let debounceTimeout: any = null
 
 /* ---------------- PRODUCTION ENVIRONMENT SETUP ---------------- */
 // 🚀 FIXED: Dynamic targeting for HTTP endpoints using runtime environment variables
@@ -250,26 +249,3 @@ onUnmounted(() => {
     <IncidentSidebar :getSeverityStyle="getSeverityStyle" />
   </div>
 </template>
-
-<style>
-/* Global Transitions kept here */
-.vue-recycle-scroller__item-wrapper > div:nth-child(even) {
-  background-color: rgba(248, 250, 252, 0.8);
-}
-.slide-enter-active,
-.slide-leave-active {
-  transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
-}
-.slide-enter-from,
-.slide-leave-to {
-  transform: translateX(100%);
-}
-.fade-enter-active,
-.fade-leave-active {
-  transition: opacity 0.3s ease;
-}
-.fade-enter-from,
-.fade-leave-to {
-  opacity: 0;
-}
-</style>

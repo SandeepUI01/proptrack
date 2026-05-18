@@ -2,3 +2,24 @@
 @theme {
   --font-display: "Oswald", sans-serif; 
 }
+
+/* Global Transitions kept here */
+.vue-recycle-scroller__item-wrapper > div:nth-child(even) {
+  background-color: rgba(248, 250, 252, 0.8);
+}
+.slide-enter-active,
+.slide-leave-active {
+  transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.slide-enter-from,
+.slide-leave-to {
+  transform: translateX(100%);
+}
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.3s ease;
+}
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
+}

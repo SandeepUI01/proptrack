@@ -4,14 +4,20 @@ WORKDIR /app
 COPY package*.json ./
 RUN npm install
 COPY . .
-# Ensure Vite builds for production
+
+# 🚀 CHANGED: Inject production environment variables during the build step
+ARG VITE_API_URL
+ARG VITE_WS_URL
+ENV VITE_API_URL=$VITE_API_URL
+ENV VITE_WS_URL=$VITE_WS_URL
+
 RUN npm run build
 
 # Stage 2: Serve with Nginx
 FROM nginx:stable-alpine
-# Copy built assets to Nginx
 COPY --from=builder /app/dist /usr/share/nginx/html
-# Custom Nginx config to handle Vue routing and SPA behavior
+
+# 🚀 CHANGED: Let Nginx bind dynamically to the $PORT variable provided by Railway
 RUN echo 'server { \
     listen 80; \
     location / { \
@@ -19,7 +25,9 @@ RUN echo 'server { \
         index index.html; \
         try_files $uri $uri/ /index.html; \
     } \
-}' > /etc/nginx/conf.d/default.conf
+}' > /etc/nginx/conf.d/default.conf.template
 
 EXPOSE 80
-CMD ["nginx", "-g", "daemon off;"]
+
+# 🚀 CHANGED: Substitute the template port variable before igniting Nginx
+CMD ["/bin/sh", "-c", "envsubst '${PORT}' < /etc/nginx/conf.d/default.conf.template > /etc/nginx/conf.d/default.conf && exec nginx -g 'daemon off;'"]

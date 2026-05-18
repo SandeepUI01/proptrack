@@ -1,19 +1,32 @@
+version: "3.8"
+
 services:
   backend:
-    build: ./backend
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
     container_name: proptrack-api
     ports:
       - "8080:8080"
     environment:
+      - PORT=8080
+      - GIN_MODE=debug # Keeps logging active for your local docker runs
       - DATABASE_URL=${DATABASE_URL}
-      - HUGGINGFACE_API_KEY=${HUGGINGFACE_API_KEY}
+      - HUGGINGFACE_TOKEN=${HUGGINGFACE_TOKEN} # 🚀 FIXED: Matches your exact Go code environment key
     restart: always
 
   frontend:
-    build: ./frontend
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        - VITE_API_URL=http://localhost:8080
+        - VITE_WS_URL=ws://localhost:8080/ws
     container_name: proptrack-ui
     ports:
-      - "8081:80" # Maps your browser http://localhost to Nginx inside the container
+      - "8081:80" # Access via http://localhost:8081 locally
+    environment:
+      - PORT=80 # Injects the port target for your Nginx boot template
     depends_on:
       - backend
     restart: always

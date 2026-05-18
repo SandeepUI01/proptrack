@@ -339,7 +339,8 @@ func main() {
 	}
 
 	log.Printf("System core operational. Server starting on port %s...", port)
-	if err := r.Run(":" + port); err != nil {
+	// 🚀 UPDATED: Binds to 0.0.0.0 to allow both native local runs AND Docker/Railway proxy routing
+	if err := r.Run("0.0.0.0:" + port); err != nil {
 		log.Fatalf("Critical system failure starting router: %v", err)
 	}
 }
