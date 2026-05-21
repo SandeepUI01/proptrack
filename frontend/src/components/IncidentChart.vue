@@ -1,8 +1,8 @@
 <template>
-  <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
+  <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
     <!-- Live Throughput Pulse -->
     <div
-      class="md:col-span-3 bg-white border border-slate-200 rounded-xl p-4 shadow-sm h-40 relative overflow-hidden"
+      class="col-span-1 md:col-span-1 lg:col-span-3 bg-white border border-slate-200 rounded-xl p-4 shadow-sm h-40 relative overflow-hidden"
     >
       <div class="absolute top-3 left-4 z-10 flex items-center gap-2">
         <span class="relative flex h-2 w-2">
@@ -20,7 +20,7 @@
 
     <!-- Risk Distribution -->
     <div
-      class="bg-white border border-slate-200 rounded-xl p-4 shadow-sm h-40 flex flex-col justify-between overflow-hidden relative"
+      class="col-span-1 bg-white border border-slate-200 rounded-xl p-4 shadow-sm h-40 flex flex-col justify-between overflow-hidden relative"
     >
       <span
         class="absolute top-3 left-4 text-[10px] font-black text-slate-500 uppercase tracking-widest"
@@ -45,7 +45,6 @@ import {
 import { CanvasRenderer } from 'echarts/renderers'
 import { useIncidentStore } from '../stores/useIncidentStore'
 
-// Registering essentials
 echarts.use([
   LineChart,
   PieChart,
@@ -64,8 +63,16 @@ let myChart: echarts.ECharts | null = null
 let donutChart: echarts.ECharts | null = null
 let updateInterval: number | null = null
 
+// Keep track of local visible metrics inside the component only
+const localVisibleDist = ref({ CRITICAL: 0, HIGH: 0, MEDIUM: 0, LOW: 0 })
+
+const handleResize = () => {
+  myChart?.resize()
+  donutChart?.resize()
+}
+
 onMounted(() => {
-  // 1. THROUGHPUT PULSE CHART
+  // Throughput Line Plot Initialization
   if (chartDom.value) {
     myChart = echarts.init(chartDom.value, undefined, { renderer: 'canvas' })
     myChart.setOption({
@@ -78,7 +85,6 @@ onMounted(() => {
       },
       yAxis: {
         type: 'value',
-
         splitLine: { lineStyle: { color: '#f1f5f9' } },
         axisLabel: { color: '#94a3b8', fontSize: 6 }
       },
@@ -87,12 +93,7 @@ onMounted(() => {
           type: 'text',
           right: 5,
           top: 'center',
-          style: {
-            text: 'NOW',
-            fill: '#10b981',
-
-            fontSize: 10
-          }
+          style: { text: 'NOW', fill: '#10b981', fontSize: 10 }
         }
       ],
       series: [
@@ -113,13 +114,13 @@ onMounted(() => {
     })
   }
 
-  // 2. RISK DONUT CHART
+  // Risk Donut Chart Initialization
   if (donutDom.value) {
     donutChart = echarts.init(donutDom.value, undefined, { renderer: 'canvas' })
     donutChart.setOption({
       legend: {
         orient: 'vertical',
-        right: '5%',
+        right: '2%',
         top: 'middle',
         itemWidth: 8,
         itemHeight: 8,
@@ -131,16 +132,15 @@ onMounted(() => {
           fontFamily: 'monospace'
         },
         formatter: (name: string) => {
-          const val =
-            store.severityDistribution[name as keyof typeof store.severityDistribution] || 0
+          const val = localVisibleDist.value[name as keyof typeof localVisibleDist.value] || 0
           return `${name.padEnd(9)} ${val}`
         }
       },
       series: [
         {
           type: 'pie',
-          radius: ['55%', '85%'],
-          center: ['30%', '50%'],
+          radius: ['45%', '70%'],
+          center: ['35%', '50%'],
           avoidLabelOverlap: false,
           label: { show: false },
           emphasis: { disabled: true },
@@ -155,59 +155,84 @@ onMounted(() => {
     })
   }
 
-  // 3. EFFICIENT UPDATE LOOP
+  // Visual Synchronizer Tick Loop
   updateInterval = window.setInterval(() => {
     myChart?.setOption({
       series: [{ data: store.pulseHistory }]
     })
 
+    // SAFE LOCAL CALCULATION: Count only what is on screen right now
+    const currentOnScreen = { CRITICAL: 0, HIGH: 0, MEDIUM: 0, LOW: 0 }
+    store.incidents.forEach((incident) => {
+      const sev = incident.severity?.toUpperCase()
+      if (sev in currentOnScreen) {
+        currentOnScreen[sev as keyof typeof currentOnScreen]++
+      }
+    })
+
+    // Save to our component variable
+    localVisibleDist.value = currentOnScreen
+
+    // Update ECharts without modifying global Pinia store engines
     donutChart?.setOption(
       {
         legend: {
+          orient: 'vertical',
+          right: '2%',
+          top: 'middle',
+          itemWidth: 8,
+          itemHeight: 8,
+          itemGap: 4,
+          textStyle: {
+            color: '#475569',
+            fontSize: 10,
+            fontWeight: '600',
+            fontFamily: 'monospace'
+          },
           formatter: (name: string) => {
-            const val =
-              store.severityDistribution[name as keyof typeof store.severityDistribution] || 0
+            const val = localVisibleDist.value[name as keyof typeof localVisibleDist.value] || 0
             return `${name.padEnd(9)} ${val}`
           }
         },
         series: [
           {
+            type: 'pie',
+            radius: ['45%', '70%'],
+            center: ['35%', '50%'],
+            avoidLabelOverlap: false,
+            label: { show: false },
+            emphasis: { disabled: true },
             data: [
               {
                 name: 'CRITICAL',
-                value: store.severityDistribution.CRITICAL,
+                value: localVisibleDist.value.CRITICAL,
                 itemStyle: { color: '#ef4444' }
               },
               {
                 name: 'HIGH',
-                value: store.severityDistribution.HIGH,
+                value: localVisibleDist.value.HIGH,
                 itemStyle: { color: '#f97316' }
               },
               {
                 name: 'MEDIUM',
-                value: store.severityDistribution.MEDIUM,
+                value: localVisibleDist.value.MEDIUM,
                 itemStyle: { color: '#eab308' }
               },
               {
                 name: 'LOW',
-                value: store.severityDistribution.LOW,
+                value: localVisibleDist.value.LOW,
                 itemStyle: { color: '#22c55e' }
               }
             ]
           }
         ]
       },
-      false
+      true // Safe because full structural layout options are specified above
     )
   }, 1000)
 
   window.addEventListener('resize', handleResize)
 })
-
-const handleResize = () => {
-  myChart?.resize()
-  donutChart?.resize()
-}
 
 onUnmounted(() => {
   window.removeEventListener('resize', handleResize)

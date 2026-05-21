@@ -47,10 +47,20 @@ const store = useIncidentStore()
         >
       </span>
       <span class="bg-white border px-3 py-1 rounded-full shadow-sm flex items-center gap-4">
+        <!-- METRIC A: VISIBLE COUNT 
+             - Captures the exact number of rows rendered inside your virtualized scroll tree.
+             - This array is capped at ~200 items to guarantee smooth 60fps scrolling.
+             - Your Donut Chart now calculates its slices from THIS metric to avoid visual clutter!
+        -->
         <div>
           <span class="opacity-50 uppercase font-bold">Visible:</span>
           <span class="font-bold tabular-nums">{{ store.incidents.length }}</span>
         </div>
+        <!-- METRIC B: TOTAL COUNT 
+             - An ever-growing, infinite counter generated directly within the Go backend/Web Worker.
+             - Tracks every single log message received via the WebSocket since the page was opened.
+             - This is the number that climbs past 5,000+, serving as your total pipeline throughput anchor.
+        -->
         <div class="border-l pl-3">
           <span class="opacity-50 uppercase font-bold">Total:</span>
           <span class="font-bold tabular-nums text-blue-600">{{

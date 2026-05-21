@@ -1,16 +1,17 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, nextTick } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
+import { db } from './services/idb'
 import { useIncidentStore } from './stores/useIncidentStore'
 import { createFPSMonitor, monitorLongTasks } from './utils/performance'
-import { db } from './services/idb'
 
 // Component Imports
-import TheHeader from './components/TheHeader.vue'
-import PerformanceStats from './components/PerformanceStats.vue'
+import gopher from './assets/gopher.svg'
 import IncidentChart from './components/IncidentChart.vue'
-import IncidentTable from './components/IncidentTable.vue'
 import IncidentSidebar from './components/IncidentSidebar.vue'
+import IncidentTable from './components/IncidentTable.vue'
+import PerformanceStats from './components/PerformanceStats.vue'
 import SearchOverlay from './components/SearchOverlay.vue'
+import TheHeader from './components/TheHeader.vue'
 
 const store = useIncidentStore()
 
@@ -228,7 +229,11 @@ onUnmounted(() => {
         <div
           class="animate-spin rounded-full h-16 w-16 border-4 border-slate-200 border-b-indigo-600"
         ></div>
-        <span class="absolute text-xs font-mono font-bold text-indigo-600 animate-pulse">GO</span>
+        <img
+          :src="gopher"
+          alt="Go Gopher"
+          class="absolute h-12 w-12 animate-pulse object-contain"
+        />
       </div>
 
       <div class="space-y-2">
@@ -248,6 +253,27 @@ onUnmounted(() => {
         ⏳ <strong class="font-semibold">Cloud Infrastructure Note:</strong> The high-performance Go
         microservice is spinning up from cold storage on its cloud instance. Initial image boot can
         require up to 60 seconds. Subsequent operational telemetry streams will be sub-millisecond.
+      </div>
+
+      <!-- NEW: Dynamic Terminal/System Trace Log -->
+      <div
+        class="w-full text-left font-mono text-[11px] tracking-wide text-slate-400 bg-slate-900 border border-slate-800 p-3 rounded-xl shadow-inner space-y-1 overflow-hidden"
+      >
+        <div class="flex items-center space-x-2">
+          <span class="text-emerald-500">[OK]</span>
+          <span>Client initialization sequence verified.</span>
+        </div>
+        <div class="flex items-center space-x-2">
+          <span class="text-indigo-400">[NET]</span>
+          <span
+            >Locating gateway:
+            <slot class="text-slate-500">wss://proptrack-backend-c5kv.onrender.com/ws</slot></span
+          >
+        </div>
+        <div class="flex items-center space-x-2 animate-pulse text-amber-400">
+          <span>[WAIT]</span>
+          <span>Awaiting cloud container acknowledgment signal...</span>
+        </div>
       </div>
     </div>
 
