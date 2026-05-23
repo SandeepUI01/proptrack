@@ -17,7 +17,7 @@ const copyPayload = (incident: any) => {
   <Transition name="slide">
     <div
       v-if="store.selectedIncident"
-      class="fixed top-0 right-0 h-full w-[450px] bg-white shadow-2xl z-[10001] flex flex-col border-l"
+      class="fixed top-0 right-0 h-full w-80 md:w-112 bg-white shadow-2xl z-[10001] flex flex-col border-l"
     >
       <div class="p-5 border-b bg-slate-900 text-white flex justify-between items-center">
         <h2 class="font-black italic text-sm uppercase tracking-tighter">Incident Explorer</h2>

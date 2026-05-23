@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { useIncidentStore } from '../stores/useIncidentStore'
 
-// Performance telemetry data and input states piped in from parent layout containers
 const props = defineProps<{
   /**
    * 1. FPS (Frames Per Second)
@@ -36,62 +35,83 @@ const props = defineProps<{
 
 const emit = defineEmits(['update:searchQuery', 'aiSearch'])
 
-// Connect directly to our background state orchestrator engine
 const store = useIncidentStore()
 </script>
 
 <template>
-  <div class="flex gap-3 mb-4 font-mono text-xs items-center relative z-10">
-    <!-- METRIC 1: RENDER FPS -->
-    <div
-      class="px-4 py-3 rounded-xl border flex flex-col shadow-sm bg-white"
-      :class="
-        fps >= 50
-          ? 'text-green-700 border-green-200 bg-green-50'
-          : 'text-red-700 border-red-200 bg-red-50'
-      "
-    >
-      <span class="text-[10px] font-semibold opacity-70 uppercase">FPS</span>
-      <span class="text-lg font-bold">{{ fps }}</span>
-    </div>
-
-    <!-- METRIC 2: EVENTS PER SECOND (Evt/s)
-         - Sourced directly from the Pinia store state counter memory layer (`store.eventRate`).
-         - Measures real-time throughput velocity (how many logs pass through the socket per second).
-         - Acts as your data pipeline load indicator.
-    -->
-    <div
-      class="px-4 py-3 rounded-xl border flex flex-col shadow-sm bg-blue-50 text-blue-700 border-blue-200"
-    >
-      <div class="flex items-center gap-2">
-        <span class="text-[10px] font-semibold opacity-70 uppercase">Evt/s</span>
-        <span class="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse"></span>
-      </div>
-      <span class="text-lg font-bold tabular-nums">{{ store.eventRate }}</span>
-    </div>
-
-    <!-- METRIC 3: INTERACTIVE STUTTERS -->
-    <div
-      class="px-4 py-3 rounded-xl border flex flex-col shadow-sm bg-white"
-      :class="stutters === 0 ? 'text-green-700 border-green-200' : 'text-red-700 border-red-200'"
-    >
-      <span class="text-[10px] font-semibold opacity-70 uppercase">Stutters</span>
-      <span class="text-lg font-bold">{{ stutters }}</span>
-    </div>
-
-    <!-- METRIC 4: MAIN THREAD LONG TASKS -->
-    <div
-      class="px-4 py-3 rounded-xl border flex flex-col shadow-sm bg-white"
-      :class="longTasks === 0 ? 'text-green-700 border-green-200' : 'text-red-700 border-red-200'"
-    >
-      <span class="text-[10px] font-semibold opacity-70 uppercase">Long Tasks</span>
-      <span class="text-lg font-bold">{{ longTasks }}</span>
-    </div>
-
-    <!-- SEARCH TRIGGER INPUT BLOCK -->
-    <div class="flex-1 relative mx-2">
+  <div
+    class="flex flex-col md:flex-row md:flex-wrap lg:flex-nowrap gap-4 mb-4 font-mono text-xs items-center relative z-10 w-full"
+  >
+    <div class="grid grid-cols-4 gap-2 w-full md:w-auto flex-initial">
+      <!-- METRIC 1: RENDER FPS -->
       <div
-        class="bg-white rounded-xl shadow-sm border border-slate-200 flex items-center h-[68px] px-4"
+        class="px-2 py-3 rounded-xl border flex flex-col shadow-sm bg-white min-w-[80px]"
+        :class="
+          fps >= 50
+            ? 'text-green-700 border-green-200 bg-green-50'
+            : 'text-red-700 border-red-200 bg-red-50'
+        "
+      >
+        <span class="text-[9px] font-semibold opacity-70 uppercase">FPS</span>
+        <span class="text-base font-bold">{{ fps }}</span>
+      </div>
+
+      <!-- METRIC 2: EVENTS PER SECOND (Evt/s) -->
+      <div
+        class="px-2 py-3 rounded-xl border flex flex-col shadow-sm bg-blue-50 text-blue-700 border-blue-200 min-w-[80px]"
+      >
+        <div class="flex items-center gap-2">
+          <span class="text-[9px] font-semibold opacity-70 uppercase">Evt/s</span>
+          <span class="w-1.5 h-1.5 rounded-full bg-blue-500 animate-pulse"></span>
+        </div>
+        <span class="text-base font-bold tabular-nums">{{ store.eventRate }}</span>
+      </div>
+
+      <!-- METRIC 3: INTERACTIVE STUTTERS -->
+      <div
+        class="px-2 py-3 rounded-xl border flex flex-col shadow-sm bg-white min-w-[80px]"
+        :class="stutters === 0 ? 'text-green-700 border-green-200' : 'text-red-700 border-red-200'"
+      >
+        <span class="text-[9px] font-semibold opacity-70 uppercase">Stutters</span>
+        <span class="text-base font-bold">{{ stutters }}</span>
+      </div>
+
+      <!-- METRIC 4: MAIN THREAD LONG TASKS -->
+      <div
+        class="px-2 py-3 rounded-xl border flex flex-col shadow-sm bg-white min-w-[80px]"
+        :class="longTasks === 0 ? 'text-green-700 border-green-200' : 'text-red-700 border-red-200'"
+      >
+        <span class="text-[9px] font-semibold opacity-70 uppercase">Long Tasks</span>
+        <span class="text-base font-bold">{{ longTasks }}</span>
+      </div>
+    </div>
+
+    <div
+      class="flex flex-col justify-center bg-white p-3 rounded-xl border shadow-sm h-[65px] w-full md:w-auto md:ml-auto lg:ml-0 lg:order-last"
+    >
+      <span class="text-[10px] font-bold text-slate-400 uppercase tracking-widest"
+        >Quick Filters</span
+      >
+      <div
+        class="flex gap-1.5 mt-1.5 justify-between overflow-x-auto whitespace-nowrap scrollbar-none"
+      >
+        <button
+          v-for="type in ['ALL', 'CRITICAL', 'HIGH', 'MEDIUM', 'LOW']"
+          :key="type"
+          @click="store.setFilter(type)"
+          :class="
+            store.currentFilter === type ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600'
+          "
+          class="px-2.5 py-1 rounded-md text-[9px] font-black transition-all border border-transparent hover:border-slate-300"
+        >
+          {{ type }}
+        </button>
+      </div>
+    </div>
+
+    <div class="w-full md:w-full lg:flex-1 relative">
+      <div
+        class="bg-white rounded-xl shadow-sm border border-slate-200 flex items-center h-[65px] px-4"
       >
         <svg
           xmlns="http://www.w3.org/2000/svg"
@@ -118,26 +138,6 @@ const store = useIncidentStore()
           placeholder="Start typing to open Neural Search..."
           class="flex-1 bg-transparent px-3 text-[11px] font-bold outline-none uppercase"
         />
-      </div>
-    </div>
-
-    <!-- RISK SEVERITY CATEGORY FILTERS -->
-    <div class="flex-col gap-4 items-center bg-white p-3 rounded-xl border ml-auto shadow-sm">
-      <span class="text-[10px] font-bold text-slate-400 uppercase mb-2 tracking-widest"
-        >Quick Filters</span
-      >
-      <div class="flex gap-2 mt-2">
-        <button
-          v-for="type in ['ALL', 'CRITICAL', 'HIGH', 'MEDIUM', 'LOW']"
-          :key="type"
-          @click="store.setFilter(type)"
-          :class="
-            store.currentFilter === type ? 'bg-slate-900 text-white' : 'bg-slate-100 text-slate-600'
-          "
-          class="px-3 py-1 rounded-md text-[10px] font-black transition-all border border-transparent hover:border-slate-300"
-        >
-          {{ type }}
-        </button>
       </div>
     </div>
   </div>
