@@ -204,7 +204,7 @@ onUnmounted(() => {
 
 <template>
   <div
-    class="p-6 h-screen flex flex-col bg-slate-50 font-sans relative overflow-hidden text-slate-900"
+    class="p-4 sm:p-6 min-h-screen bg-slate-50 font-sans relative text-slate-900 block md:flex md:flex-col md:h-screen md:overflow-hidden"
   >
     <!-- GLOBAL AI SEARCH MODAL OVERLAY -->
     <SearchOverlay
@@ -219,10 +219,9 @@ onUnmounted(() => {
     />
 
     <!-- 1. ENGINE COLD-START LOADER LAYER -->
-    <!-- Renders if the array is empty AND the store connection is initializing -->
     <div
       v-if="store.incidents.length === 0"
-      class="relative z-1 flex flex-col items-center justify-center h-full max-w-xl mx-auto text-center px-4 space-y-6"
+      class="relative z-1 flex flex-col items-center justify-center pt-12 md:my-auto max-w-xl mx-auto text-center px-4 space-y-6"
     >
       <!-- Tech-Forward High Performance Loading Animation -->
       <div class="relative flex items-center justify-center">
@@ -251,11 +250,11 @@ onUnmounted(() => {
         class="w-full text-xs text-amber-700 bg-amber-50/80 backdrop-blur border border-amber-200/60 p-4 rounded-xl shadow-sm animate-pulse"
       >
         ⏳ <strong class="font-semibold">Cloud Infrastructure Note:</strong> The high-performance Go
-        microservice is spinning up from cold storage on its cloud instance. Initial image boot can
-        require up to 60 seconds. Subsequent operational telemetry streams will be sub-millisecond.
+        microservice is spinning up from cold storage. Initial image boot can require up to 60
+        seconds.
       </div>
 
-      <!-- NEW: Dynamic Terminal/System Trace Log -->
+      <!-- Dynamic Terminal Log -->
       <div
         class="w-full text-left font-mono text-[11px] tracking-wide text-slate-400 bg-slate-900 border border-slate-800 p-3 rounded-xl shadow-inner space-y-1 overflow-hidden"
       >
@@ -265,10 +264,10 @@ onUnmounted(() => {
         </div>
         <div class="flex items-center space-x-2">
           <span class="text-indigo-400">[NET]</span>
-          <span
-            >Locating gateway:
-            <slot class="text-slate-500">wss://proptrack-backend-c5kv.onrender.com/ws</slot></span
-          >
+          <span>
+            Locating gateway:
+            <slot class="text-slate-500">wss://proptrack-backend-c5kv.onrender.com/ws</slot>
+          </span>
         </div>
         <div class="flex items-center space-x-2 animate-pulse text-amber-400">
           <span>[WAIT]</span>
@@ -278,16 +277,19 @@ onUnmounted(() => {
     </div>
 
     <!-- 2. FULL REAL-TIME ANALYTICS DASHBOARD LAYER -->
-    <!-- Swaps in cleanly once the first packet drops over the WebSocket -->
-    <div v-else class="relative z-1 flex flex-col h-full">
-      <TheHeader
-        :performanceScore="performanceScore"
-        :scoreLabel="scoreLabel"
-        :isExporting="isExporting"
-        @export="exportToCSV"
-        @setSort="setSort"
-      />
 
+    <div v-else class="relative z-1 block space-y-4 md:flex md:flex-col md:flex-1 md:min-h-0">
+      <div
+        class="sticky top-0 z-20 -mx-4 px-4 py-2 bg-slate-50/95 backdrop-blur-md border-b border-slate-200/50 md:relative md:top-auto md:mx-0 md:px-0 md:py-0 md:bg-transparent md:backdrop-blur-none md:border-b-0 space-y-3 shrink-0"
+      >
+        <TheHeader
+          :performanceScore="performanceScore"
+          :scoreLabel="scoreLabel"
+          :isExporting="isExporting"
+          @export="exportToCSV"
+          @setSort="setSort"
+        />
+      </div>
       <PerformanceStats
         v-model:searchQuery="searchQuery"
         :fps="fps"
@@ -296,17 +298,22 @@ onUnmounted(() => {
         @aiSearch="handleAISearch"
       />
 
+      <!-- Live Graphical Analytics Track -->
       <IncidentChart />
 
-      <IncidentTable
-        :sortKey="sortKey"
-        :sortDir="sortDir"
-        :getSeverityBorder="getSeverityBorder"
-        :getSeverityBg="getSeverityBg"
-        :getSeverityStyle="getSeverityStyle"
-        :formatTimestamp="formatTimestamp"
-        @sort="setSort"
-      />
+      <div
+        class="w-full block md:flex md:flex-col md:flex-1 md:min-h-0 overflow-x-auto md:overflow-x-visible"
+      >
+        <IncidentTable
+          :sortKey="sortKey"
+          :sortDir="sortDir"
+          :getSeverityBorder="getSeverityBorder"
+          :getSeverityBg="getSeverityBg"
+          :getSeverityStyle="getSeverityStyle"
+          :formatTimestamp="formatTimestamp"
+          @sort="setSort"
+        />
+      </div>
     </div>
 
     <!-- SIDEBAR DRAWER OVERLAY -->
