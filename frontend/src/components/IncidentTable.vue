@@ -15,10 +15,10 @@ const store = useIncidentStore()
 </script>
 
 <template>
-  <div class="flex-1 min-h-0 flex flex-col relative z-0">
+  <div class="flex-1 min-h-0 flex flex-col relative z-0 w-full min-w-[600px] md:min-w-0">
     <!-- Header -->
     <div
-      class="flex items-center h-10 px-4 font-mono text-[10px] font-bold bg-slate-100 text-slate-500 uppercase border rounded-t-xl"
+      class="flex items-center h-10 px-4 font-mono text-[10px] font-bold bg-slate-100 text-slate-500 uppercase border rounded-t-xl shrink-0"
     >
       <span class="w-32 cursor-pointer hover:text-slate-900" @click="$emit('sort', 'timestamp')">
         TIME {{ sortKey === 'timestamp' ? (sortDir === 'asc' ? '↑' : '↓') : '' }}
@@ -43,10 +43,16 @@ const store = useIncidentStore()
       </span>
     </div>
 
-    <!-- Scroller -->
-    <div class="flex-1 bg-white border border-t-0 shadow-lg overflow-hidden rounded-b-xl relative">
+    <!-- Scroller Responsive Window Box -->
+    <!-- 
+      - Mobile (<768px): h-[400px] (stops it from going down into infinite length)
+      - Desktop (>=768px): md:flex-1 md:h-full (takes up all remaining desktop space perfectly)
+    -->
+    <div
+      class="w-full h-[400px] md:flex-1 md:h-full bg-white border border-t-0 shadow-lg overflow-hidden rounded-b-xl relative"
+    >
       <RecycleScroller
-        class="h-full"
+        class="h-full scroller"
         :items="store.incidents"
         :item-size="44"
         key-field="id"
@@ -61,9 +67,9 @@ const store = useIncidentStore()
             store.selectedIncident?.id === item.id ? getSeverityBg(item.severity) : 'bg-white'
           ]"
         >
-          <span class="w-32 text-slate-400 tabular-nums font-bold">{{
-            formatTimestamp(item.timestamp)
-          }}</span>
+          <span class="w-32 text-slate-400 tabular-nums font-bold">
+            {{ formatTimestamp(item.timestamp) }}
+          </span>
           <div class="flex-1 px-4 truncate flex flex-col">
             <span class="font-bold text-slate-800 text-xs truncate">{{ item.service }}</span>
             <span class="text-[8px] text-slate-400 font-bold uppercase">{{ item.id }}</span>
@@ -84,3 +90,10 @@ const store = useIncidentStore()
     </div>
   </div>
 </template>
+
+<style scoped>
+.scroller {
+  height: 100%;
+  overflow-y: auto;
+}
+</style>
