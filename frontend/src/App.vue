@@ -196,7 +196,7 @@ onMounted(() => {
 
 onUnmounted(() => {
   store.disconnect()
-  if (debounceTimeout) clearTimeout(debounceTimeout) // 🚀 FIXED: Clear active timeouts to avoid thread memory leak cascades
+  if (debounceTimeout) clearTimeout(debounceTimeout) //  FIXED: Clear active timeouts to avoid thread memory leak cascades
   window.removeEventListener('mousedown', handleGlobalClick)
   window.removeEventListener('keydown', handleKeyDown)
 })
