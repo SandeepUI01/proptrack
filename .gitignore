@@ -14,9 +14,10 @@ frontend/.env
 backend/bin/
 backend/obj/
 backend/vendor/
+backend/main
 # If you build locally, ignore the executable
 backend/*.exe
-backend/backend  
+backend/backend
 
 # --- Node / Vue (Frontend) ---
 frontend/node_modules/
