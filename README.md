@@ -60,6 +60,8 @@ High-concurrency Go server utilizing a single-handler WebSocket pattern for low-
 - **API Gateway (HTTP):** `https://proptrack-backend.onrender.com`
 - **Real-Time Gateway (WS):** `wss://proptrack-backend.onrender.com/ws`
 
+---
+
 ### Option A: Native Local Development
 
 _Recommended for local benchmarking._
@@ -71,31 +73,37 @@ cd backend
 # Ensure your local .env file contains valid DATABASE_URL and HUGGINGFACE_TOKEN values
 go build -o main ./cmd/main.go
 ./main
+```
 
-2. Launch the Frontend UI
-Bash
+#### 2. Launch the Frontend UI
 
+```bash
 cd frontend
 npm install
 npm run dev
+```
 
-    Note: The local development application defaults to the Vite standard environment configuration (VITE_API_URL=http://localhost:8080).
+> **Note:** The local development application defaults to the Vite standard environment configuration (`VITE_API_URL=http://localhost:8080`).
 
-Option B: Docker Containerized Mode
+---
 
-Recommended for production simulation.
+### Option B: Docker Containerized Mode
+
+_Recommended for production simulation._
 
 The project utilizes multi-stage Docker configurations to decouple structural source compilation from the runtime environment, ensuring minimal container image footprints.
-Bash
 
+```bash
 # Execute from the project root directory
-docker-compose up --build
-
-Continuous Integration & Deployment (CI/CD)
-Frontend to Vercel
-
-Merges to the tracking production branch trigger an automated build hook on Vercel. Vue Single File Components (SFCs) are minified, assets are chunked via Vite, and edge targets are updated with zero system downtime.
-Backend to Render
-
-Code pushes signal the Render deployment manager. The pipeline isolates the target folder directory, compiles the updated native binary (go build -o main ./cmd/main.go), and safely cycles the application server.
+docker compose up --build
 ```
+
+---
+
+## Continuous Integration & Deployment (CI/CD)
+
+### Frontend to Vercel
+Merges to the tracking production branch trigger an automated build hook on Vercel. Vue Single File Components (SFCs) are minified, assets are chunked via Vite, and edge targets are updated with zero system downtime.
+
+### Backend to Render
+Code pushes signal the Render deployment manager. The pipeline isolates the target folder directory, compiles the updated native binary (`go build -o main ./cmd/main.go`), and safely cycles the application server.
